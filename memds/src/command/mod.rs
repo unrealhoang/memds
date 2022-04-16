@@ -150,22 +150,24 @@ fn handle_unsupported_command(args: &[&str], write_buf: &mut Vec<u8>) -> Result<
     Ok(())
 }
 
+macro_rules! try_commands {
+    (($args:ident, $db:ident, $write_buf:ident) {$command_type:ident}) => {
+        if parse_handle::<$command_type>($args, $db, $write_buf)? {
+            return Ok(());
+        }
+    };
+    (($args:ident, $db:ident, $write_buf:ident) {$cmd_type1:ident, $($cmd_type2:ident),+}) => {
+        try_commands!(($args, $db, $write_buf) {$cmd_type1});
+        try_commands!(($args, $db, $write_buf) {$($cmd_type2),+})
+    }
+}
 pub fn parse_and_handle(args: &[&str], db: &Database, write_buf: &mut Vec<u8>) -> Result<(), Error> {
     if args.is_empty() {
         return Err(Error::Parse(command_args::Error::Incompleted));
     }
-    if parse_handle::<HelloCommand>(args, db, write_buf)? {
-        return Ok(());
-    };
-    if parse_handle::<CommandCommand>(args, db, write_buf)? {
-        return Ok(());
-    };
-    if parse_handle::<GetCommand>(args, db, write_buf)? {
-        return Ok(());
-    };
-    if parse_handle::<SetCommand>(args, db, write_buf)? {
-        return Ok(());
-    };
+    try_commands!((args, db, write_buf) {
+        HelloCommand, CommandCommand, GetCommand, SetCommand
+    });
 
     // not supported command
     handle_unsupported_command(args, write_buf)
