@@ -1,102 +1,16 @@
 use std::fmt::Display;
 
 use command_args::CommandArgs;
-use command_args_derive::CommandArgsBlock;
 use serde::Serialize;
 
 use crate::server::Database;
 
+mod connection;
+mod string;
+
 pub trait CommandHandler {
     type Output: Serialize;
     fn handle(self, db: &Database) -> Result<Self::Output, Error>;
-}
-
-#[derive(Debug, CommandArgsBlock)]
-#[argtoken("AUTH")]
-pub struct HelloAuthArg<'a> {
-    pub username: &'a str,
-    pub password: &'a str,
-}
-
-#[derive(Debug, CommandArgsBlock)]
-#[argtoken("HELLO")]
-pub struct HelloCommand<'a> {
-    pub protover: usize,
-    pub auth: Option<HelloAuthArg<'a>>,
-}
-
-#[derive(Debug, CommandArgsBlock)]
-#[argtoken("COMMAND")]
-pub struct CommandCommand {
-}
-
-#[derive(Debug, Serialize)]
-pub struct ServerProperties {
-    server: String,
-    version: String,
-    proto: usize,
-}
-
-impl<'a> CommandHandler for HelloCommand<'a> {
-    type Output = ServerProperties;
-
-    fn handle(self, _db: &Database) -> Result<Self::Output, Error> {
-        Ok(ServerProperties {
-            server: String::from("memds"),
-            version: String::from("0.0.1"),
-            proto: 3,
-        })
-    }
-}
-
-impl CommandHandler for CommandCommand {
-    type Output = [usize; 0];
-
-    fn handle(self, _db: &Database) -> Result<Self::Output, Error> {
-        Ok([])
-    }
-}
-
-#[derive(Debug, CommandArgsBlock)]
-#[argtoken("GET")]
-pub struct GetCommand<'a> {
-    key: &'a str,
-}
-
-impl<'a> CommandHandler for GetCommand<'a> {
-    type Output = Option<String>;
-
-    fn handle(self, db: &Database) -> Result<Self::Output, Error> {
-        Ok(db.get(self.key))
-    }
-}
-
-#[derive(Debug, CommandArgsBlock)]
-#[argtoken("SET")]
-pub struct SetCommand<'a> {
-    key: &'a str,
-    value: &'a str,
-}
-
-#[derive(Debug)]
-pub struct OkResponse;
-
-impl Serialize for OkResponse {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer
-    {
-        serializer.serialize_newtype_struct("$SimpleString", "OK")
-    }
-}
-
-impl<'a> CommandHandler for SetCommand<'a> {
-    type Output = OkResponse;
-
-    fn handle(self, db: &Database) -> Result<Self::Output, Error> {
-        db.set(self.key, self.value);
-        Ok(OkResponse)
-    }
 }
 
 #[derive(Debug)]
@@ -151,12 +65,12 @@ fn handle_unsupported_command(args: &[&str], write_buf: &mut Vec<u8>) -> Result<
 }
 
 macro_rules! try_commands {
-    (($args:ident, $db:ident, $write_buf:ident) {$command_type:ident}) => {
+    (($args:ident, $db:ident, $write_buf:ident) {$command_type:path}) => {
         if parse_handle::<$command_type>($args, $db, $write_buf)? {
             return Ok(());
         }
     };
-    (($args:ident, $db:ident, $write_buf:ident) {$cmd_type1:ident, $($cmd_type2:ident),+}) => {
+    (($args:ident, $db:ident, $write_buf:ident) {$cmd_type1:path, $($cmd_type2:path),+}) => {
         try_commands!(($args, $db, $write_buf) {$cmd_type1});
         try_commands!(($args, $db, $write_buf) {$($cmd_type2),+})
     }
@@ -166,7 +80,10 @@ pub fn parse_and_handle(args: &[&str], db: &Database, write_buf: &mut Vec<u8>) -
         return Err(Error::Parse(command_args::Error::Incompleted));
     }
     try_commands!((args, db, write_buf) {
-        HelloCommand, CommandCommand, GetCommand, SetCommand
+        self::connection::HelloCommand,
+        self::connection::CommandCommand,
+        self::string::GetCommand,
+        self::string::SetCommand
     });
 
     // not supported command
@@ -176,18 +93,6 @@ pub fn parse_and_handle(args: &[&str], db: &Database, write_buf: &mut Vec<u8>) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use command_args::CommandArgs;
-
-    #[test]
-    fn test_parse_hello_command() {
-        let args = ["HELLO", "3", "AUTH", "user", "pass"];
-        let command = HelloCommand::parse_maybe(&mut &args[..])
-            .unwrap()
-            .unwrap();
-        assert_eq!(command.protover, 3);
-        assert_eq!(command.auth.as_ref().unwrap().username, "user");
-        assert_eq!(command.auth.as_ref().unwrap().username, "user");
-    }
 
     #[test]
     fn test_handle_and_parse_hello_command() {
