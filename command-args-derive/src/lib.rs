@@ -61,10 +61,11 @@ mod expand {
         let parse_token = if let Some(token) = token {
             let token_span = token.span();
             quote_spanned! {token_span=>
-                if let Some(&#token) = args.get(0) {
-                    *args = &mut &args[1..];
-                } else {
-                    return Err(::command_args::Error::TokenNotFound(#token));
+                match args.get(0) {
+                    Some(s) if s.eq_ignore_ascii_case(#token) => {
+                        *args = &mut &args[1..];
+                    },
+                    _ => { return Err(::command_args::Error::TokenNotFound(#token)); }
                 }
             }
         } else {
@@ -82,10 +83,11 @@ mod expand {
         let parse_token = if let Some(token) = token {
             let token_span = token.span();
             quote_spanned! {token_span=>
-                if let Some(&#token) = args.get(0) {
-                    *args = &mut &args[1..];
-                } else {
-                    return Ok(None);
+                match args.get(0) {
+                    Some(s) if s.eq_ignore_ascii_case(#token) => {
+                        *args = &mut &args[1..];
+                    },
+                    _ => { return Ok(None); }
                 }
             }
         } else {
@@ -122,10 +124,7 @@ mod expand {
             syn::Fields::Named(named) => named_fields_parse(named),
             syn::Fields::Unnamed(tuple) => tuple_fields_parse(tuple),
             syn::Fields::Unit => {
-                return Err(Error::new(
-                    s.struct_token.span(),
-                    "unit struct not supported",
-                ));
+                Ok((TokenStream::new(), quote! { Self }))
             }
         }
     }

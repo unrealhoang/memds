@@ -1,5 +1,5 @@
 use command_args_derive::CommandArgsBlock;
-use serde::Serialize;
+use deseresp::types::OkResponse;
 
 use crate::server::Database;
 
@@ -24,18 +24,6 @@ impl<'a> CommandHandler for GetCommand<'a> {
 pub struct SetCommand<'a> {
     key: &'a str,
     value: &'a str,
-}
-
-#[derive(Debug)]
-pub struct OkResponse;
-
-impl Serialize for OkResponse {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer
-    {
-        serializer.serialize_newtype_struct("$SimpleString", "OK")
-    }
 }
 
 impl<'a> CommandHandler for SetCommand<'a> {

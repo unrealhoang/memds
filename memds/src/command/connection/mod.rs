@@ -21,8 +21,7 @@ pub struct HelloCommand<'a> {
 
 #[derive(Debug, CommandArgsBlock)]
 #[argtoken("COMMAND")]
-pub struct CommandCommand {
-}
+pub struct CommandCommand;
 
 #[derive(Debug, Serialize)]
 pub struct ServerProperties {

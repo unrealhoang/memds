@@ -33,17 +33,13 @@ where
     T: CommandHandler,
     T: CommandArgs<'a>,
     T: std::fmt::Debug,
-    <T as CommandHandler>::Output: std::fmt::Debug,
 {
     let command = T::parse_maybe(&mut &args[..])
         .map_err(|e| Error::Parse(e))?;
 
     let mut serializer = deseresp::from_write(write_buf);
     if let Some(command) = command {
-        tracing::info!("received {:?}", command);
-
         let result = command.handle(db)?;
-        tracing::info!("Return {:?}", result);
 
         result.serialize(&mut serializer)
             .map_err(|e| Error::Serialize(e.to_string()))?;

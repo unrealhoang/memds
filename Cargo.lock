@@ -57,9 +57,9 @@ dependencies = [
 
 [[package]]
 name = "deseresp"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f582938fbe07523c6bd080e8b4a04ecf93504c7c62a177e832b46561259370c"
+checksum = "94d59ea154cd51952607677b2e923263873695574dc12671038cb29441a15005"
 dependencies = [
  "num",
  "serde",
