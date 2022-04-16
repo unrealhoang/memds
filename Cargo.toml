@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "memds",
+    "command-args",
+    "command-args-derive",
+]
