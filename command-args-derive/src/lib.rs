@@ -15,8 +15,8 @@ mod expand {
     use proc_macro2::{Span, TokenStream};
     use quote::{quote, quote_spanned};
     use syn::{
-        parse_quote, spanned::Spanned, DeriveInput, Error, GenericArgument, GenericParam, Lifetime,
-        LifetimeDef, LitStr, Path, PathArguments, PathSegment, Result, Type, TypePath,
+        parse_quote, spanned::Spanned, DeriveInput, Error, GenericArgument, GenericParam, Ident,
+        Lifetime, LifetimeDef, LitStr, Path, PathArguments, PathSegment, Result, Type, TypePath,
     };
 
     pub(crate) fn expand(input: DeriveInput) -> Result<TokenStream> {
@@ -118,13 +118,9 @@ mod expand {
     fn struct_fields_parse(s: &syn::DataStruct) -> Result<(TokenStream, TokenStream)> {
         match &s.fields {
             syn::Fields::Named(named) => named_fields_parse(named),
-            syn::Fields::Unnamed(tuple) => tuple_fields_parse(tuple),
+            syn::Fields::Unnamed(tuple) => unnamed_fields_parse(tuple),
             syn::Fields::Unit => Ok((TokenStream::new(), quote! { Self })),
         }
-    }
-
-    fn tuple_fields_parse(_tuple: &syn::FieldsUnnamed) -> Result<(TokenStream, TokenStream)> {
-        todo!()
     }
 
     fn last_path_segment(ty: &Type) -> Option<&PathSegment> {
@@ -150,6 +146,33 @@ mod expand {
             }) if ident == "Option" => gen_arg.args.first(),
             _ => None,
         }
+    }
+
+    fn unnamed_fields_parse(unnamed: &syn::FieldsUnnamed) -> Result<(TokenStream, TokenStream)> {
+        let mut count = 0;
+        let declare_vars = unnamed.unnamed.iter().map(|f| {
+            let ty = &f.ty;
+            let ty_span = f.ty.span();
+            let var_name = Ident::new(&format!("field_{}", count), ty_span);
+            count += 1;
+
+            match option_inner_type(ty) {
+                Some(inner_ty) => quote_spanned! {ty_span=>
+                    let #var_name = <#inner_ty as ::command_args::CommandArgs>::parse_maybe(args)?;
+                },
+                None => quote_spanned! {ty_span=>
+                    let #var_name = <#ty as ::command_args::CommandArgs>::parse(args)?;
+                },
+            }
+        });
+
+        let mut count = 0;
+        let return_fields = unnamed.unnamed.iter().map(|f| {
+            let r = Ident::new(&format!("field_{}", count), f.ty.span());
+            count += 1;
+            r
+        });
+        Ok((quote!(#(#declare_vars)*), quote!(Self(#(#return_fields),*))))
     }
 
     fn named_fields_parse(named: &syn::FieldsNamed) -> Result<(TokenStream, TokenStream)> {
