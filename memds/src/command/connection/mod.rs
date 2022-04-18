@@ -1,7 +1,8 @@
 use command_args_derive::CommandArgsBlock;
+use deseresp::types::owned::SimpleString;
 use serde::Serialize;
 
-use crate::server::Database;
+use crate::database::Database;
 
 use super::{CommandHandler, Error};
 
@@ -30,6 +31,10 @@ pub struct ServerProperties {
     proto: usize,
 }
 
+#[derive(Debug, CommandArgsBlock)]
+#[argtoken("COMMAND")]
+pub struct PingCommand;
+
 impl<'a> CommandHandler for HelloCommand<'a> {
     type Output = ServerProperties;
 
@@ -50,6 +55,14 @@ impl CommandHandler for CommandCommand {
     }
 }
 
+impl CommandHandler for PingCommand {
+    type Output = SimpleString;
+
+    fn handle(self, _db: &Database) -> Result<Self::Output, Error> {
+        Ok(SimpleString("PONG".into()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -58,9 +71,7 @@ mod tests {
     #[test]
     fn test_parse_hello_command() {
         let args = ["HELLO", "3", "AUTH", "user", "pass"];
-        let command = HelloCommand::parse_maybe(&mut &args[..])
-            .unwrap()
-            .unwrap();
+        let command = HelloCommand::parse_maybe(&mut &args[..]).unwrap().unwrap();
         assert_eq!(command.protover, 3);
         assert_eq!(command.auth.as_ref().unwrap().username, "user");
         assert_eq!(command.auth.as_ref().unwrap().username, "user");

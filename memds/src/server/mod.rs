@@ -1,38 +1,17 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::Arc;
 
 use anyhow::bail;
 use bytes::BytesMut;
 use serde::Deserialize;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
 
+use crate::database::Database;
+
 /// 100KB buffer size for pipelined write
 const WRITE_BUF_SIZE_LIMIT: usize = 1024 * 100;
-
-pub struct Database {
-    data: Mutex<HashMap<String, String>>,
-}
-
-impl Database {
-    pub fn new() -> Self {
-        Database {
-            data: Mutex::new(Default::default()),
-        }
-    }
-
-    pub fn get(&self, key: &str) -> Option<String> {
-        self.data.lock().unwrap().get(key).map(|v| v.to_owned())
-    }
-
-    pub fn set(&self, key: &str, value: &str) {
-        self.data.lock().unwrap().insert(key.to_owned(), value.to_owned());
-    }
-}
 
 pub struct Server {
     port: u16,
@@ -70,6 +49,15 @@ struct Connection {
     db: Arc<Database>,
 }
 
+async fn flush<T>(mut writer: T, write_buf: &mut Vec<u8>)
+where
+    T: AsyncWrite + Unpin,
+{
+    if !write_buf.is_empty() {
+        writer.write_all(&write_buf[..]).await.unwrap();
+        write_buf.clear();
+    }
+}
 impl Connection {
     fn new(socket: TcpStream, db: Arc<Database>) -> Self {
         Connection { socket, db }
@@ -80,10 +68,7 @@ impl Connection {
         let mut read_buf = BytesMut::with_capacity(4096); // 1KB
         let mut write_buf = Vec::new();
         'read: loop {
-            if !write_buf.is_empty() {
-                writer.write_all(&mut write_buf[..]).await.unwrap();
-                write_buf.clear();
-            }
+            flush(&mut writer, &mut write_buf).await;
             let len = reader.read_buf(&mut read_buf).await?;
             if len == 0 {
                 if read_buf.is_empty() {
@@ -94,27 +79,34 @@ impl Connection {
                 }
             }
             'parse: loop {
-                tracing::info!("received: {}", std::str::from_utf8(&read_buf).unwrap_or(&String::from("invalid utf8")));
+                tracing::info!(
+                    "received: {}",
+                    std::str::from_utf8(&read_buf).unwrap_or(&String::from("invalid utf8"))
+                );
                 let mut deserializer = deseresp::from_slice(&read_buf);
                 let command_vec: Vec<&str> = match Deserialize::deserialize(&mut deserializer) {
-                    Ok(deserialized) => {
-                        deserialized
-                    }
+                    Ok(deserialized) => deserialized,
                     Err(deseresp::Error::EOF) => {
                         continue 'read;
                     }
                     Err(e) => {
-                        tracing::error!("Error parsing command: {}, e: {}", std::str::from_utf8(&read_buf).unwrap_or(&String::from("invalid utf8")), e);
+                        tracing::error!(
+                            "Error parsing command: {}, e: {}",
+                            std::str::from_utf8(&read_buf).unwrap_or(&String::from("invalid utf8")),
+                            e
+                        );
                         return Err(e.into());
                     }
                 };
 
-                tracing::info!("done deserializing, parse command & handle: {:?}", &command_vec);
-                match crate::command::parse_and_handle(&mut &command_vec[..], &self.db, &mut write_buf) {
-                    Ok(_) => {
-                        if write_buf.len() > WRITE_BUF_SIZE_LIMIT {
-                            writer.write_all(&mut write_buf[..]).await.unwrap();
-                            write_buf.clear();
+                tracing::info!(
+                    "done deserializing, parse command & handle: {:?}",
+                    &command_vec
+                );
+                match crate::command::parse_and_handle(&command_vec[..], &self.db, &mut write_buf) {
+                    Ok(need_flush) => {
+                        if need_flush || write_buf.len() > WRITE_BUF_SIZE_LIMIT {
+                            flush(&mut writer, &mut write_buf).await;
                         }
 
                         let consumed_bytes = deserializer.get_consumed_bytes();

@@ -1,7 +1,7 @@
 use command_args_derive::CommandArgsBlock;
 use deseresp::types::OkResponse;
 
-use crate::server::Database;
+use crate::database::Database;
 
 use super::{CommandHandler, Error};
 
@@ -15,7 +15,7 @@ impl<'a> CommandHandler for GetCommand<'a> {
     type Output = Option<String>;
 
     fn handle(self, db: &Database) -> Result<Self::Output, Error> {
-        Ok(db.get(self.key))
+        db.get(self.key)
     }
 }
 
@@ -30,7 +30,7 @@ impl<'a> CommandHandler for SetCommand<'a> {
     type Output = OkResponse;
 
     fn handle(self, db: &Database) -> Result<Self::Output, Error> {
-        db.set(self.key, self.value);
+        db.set(self.key, self.value)?;
         Ok(OkResponse)
     }
 }

@@ -15,8 +15,8 @@ mod expand {
     use proc_macro2::{Span, TokenStream};
     use quote::{quote, quote_spanned};
     use syn::{
-        parse_quote, spanned::Spanned, DeriveInput, Error, GenericParam, Lifetime, LifetimeDef,
-        LitStr, Path, Result, Type, PathArguments, GenericArgument, TypePath, PathSegment,
+        parse_quote, spanned::Spanned, DeriveInput, Error, GenericArgument, GenericParam, Lifetime,
+        LifetimeDef, LitStr, Path, PathArguments, PathSegment, Result, Type, TypePath,
     };
 
     pub(crate) fn expand(input: DeriveInput) -> Result<TokenStream> {
@@ -63,7 +63,7 @@ mod expand {
             quote_spanned! {token_span=>
                 match args.get(0) {
                     Some(s) if s.eq_ignore_ascii_case(#token) => {
-                        *args = &mut &args[1..];
+                        *args = &args[1..];
                     },
                     _ => { return Err(::command_args::Error::TokenNotFound(#token)); }
                 }
@@ -85,7 +85,7 @@ mod expand {
             quote_spanned! {token_span=>
                 match args.get(0) {
                     Some(s) if s.eq_ignore_ascii_case(#token) => {
-                        *args = &mut &args[1..];
+                        *args = &args[1..];
                     },
                     _ => { return Ok(None); }
                 }
@@ -110,12 +110,8 @@ mod expand {
     fn fields_parse(input: &DeriveInput) -> Result<(TokenStream, TokenStream)> {
         match &input.data {
             syn::Data::Struct(s) => Ok(struct_fields_parse(s)?),
-            syn::Data::Enum(_) => {
-                return Err(Error::new(input.span(), "enum not supported"));
-            }
-            syn::Data::Union(_) => {
-                return Err(Error::new(input.span(), "union not supported"));
-            }
+            syn::Data::Enum(_) => Err(Error::new(input.span(), "enum not supported")),
+            syn::Data::Union(_) => Err(Error::new(input.span(), "union not supported")),
         }
     }
 
@@ -123,9 +119,7 @@ mod expand {
         match &s.fields {
             syn::Fields::Named(named) => named_fields_parse(named),
             syn::Fields::Unnamed(tuple) => tuple_fields_parse(tuple),
-            syn::Fields::Unit => {
-                Ok((TokenStream::new(), quote! { Self }))
-            }
+            syn::Fields::Unit => Ok((TokenStream::new(), quote! { Self })),
         }
     }
 
@@ -149,7 +143,7 @@ mod expand {
 
     // if this type is Option and return the Wrapped type
     fn option_inner_type(ty: &Type) -> Option<&GenericArgument> {
-        match last_path_segment(&ty) {
+        match last_path_segment(ty) {
             Some(PathSegment {
                 ident,
                 arguments: PathArguments::AngleBracketed(ref gen_arg),
@@ -165,7 +159,7 @@ mod expand {
             let var_name = f.ident.as_ref().unwrap();
 
             match option_inner_type(ty) {
-                Some(inner_ty) => quote_spanned!{ty_span=>
+                Some(inner_ty) => quote_spanned! {ty_span=>
                     let #var_name = <#inner_ty as ::command_args::CommandArgs>::parse_maybe(args)?;
                 },
                 None => quote_spanned! {ty_span=>
@@ -173,10 +167,11 @@ mod expand {
                 },
             }
         });
-        let return_fields = named.named.iter().map(|f| {
-            f.ident.as_ref()
-        });
+        let return_fields = named.named.iter().map(|f| f.ident.as_ref());
 
-        Ok((quote!(#(#declare_vars)*), quote!(Self { #(#return_fields),* })))
+        Ok((
+            quote!(#(#declare_vars)*),
+            quote!(Self { #(#return_fields),* }),
+        ))
     }
 }

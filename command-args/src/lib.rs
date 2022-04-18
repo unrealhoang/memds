@@ -14,7 +14,7 @@ pub trait CommandArgs<'a>: Sized {
 impl<'a> CommandArgs<'a> for &'a str {
     fn parse(args: &mut &[&'a str]) -> Result<Self, Error> {
         if let Some(s) = args.get(0) {
-            *args = &mut &args[1..];
+            *args = &args[1..];
             Ok(s)
         } else {
             Err(Error::Incompleted)
@@ -23,7 +23,7 @@ impl<'a> CommandArgs<'a> for &'a str {
 
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if let Some(s) = args.get(0) {
-            *args = &mut &args[1..];
+            *args = &args[1..];
             Ok(Some(s))
         } else {
             Ok(None)
@@ -34,7 +34,7 @@ impl<'a> CommandArgs<'a> for &'a str {
 impl<'a> CommandArgs<'a> for usize {
     fn parse(args: &mut &[&'a str]) -> Result<Self, Error> {
         if let Some(s) = args.get(0) {
-            *args = &mut &args[1..];
+            *args = &args[1..];
             Ok(s.parse().map_err(|_| Error::Parse)?)
         } else {
             Err(Error::Incompleted)
@@ -43,7 +43,7 @@ impl<'a> CommandArgs<'a> for usize {
 
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if let Some(s) = args.get(0) {
-            *args = &mut &args[1..];
+            *args = &args[1..];
             Ok(Some(s.parse().map_err(|_| Error::Parse)?))
         } else {
             Ok(None)

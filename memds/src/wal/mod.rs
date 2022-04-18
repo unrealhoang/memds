@@ -1,3 +1,1 @@
-struct WalEntry {
-
-}
+struct WalEntry {}
