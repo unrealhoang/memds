@@ -31,6 +31,36 @@ impl<'a> CommandArgs<'a> for &'a str {
     }
 }
 
+impl<'a, T: CommandArgs<'a>> CommandArgs<'a> for Vec<T> {
+    fn parse(args: &mut &[&'a str]) -> Result<Self, Error> {
+        if args.is_empty() {
+            return Err(Error::Incompleted);
+        }
+
+        let mut result = Vec::new();
+        while !args.is_empty() {
+            let ele = T::parse(args)?;
+            result.push(ele);
+        }
+
+        Ok(result)
+    }
+
+    fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
+        if args.is_empty() {
+            return Ok(None);
+        }
+
+        let mut result = Vec::new();
+        while !args.is_empty() {
+            let ele = T::parse(args)?;
+            result.push(ele);
+        }
+
+        Ok(Some(result))
+    }
+}
+
 impl<'a> CommandArgs<'a> for usize {
     fn parse(args: &mut &[&'a str]) -> Result<Self, Error> {
         if let Some(s) = args.get(0) {
