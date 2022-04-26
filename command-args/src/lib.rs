@@ -1,26 +1,10 @@
 use std::fmt::Display;
 
 pub trait CommandArgs<'a>: Sized {
-    fn parse(args: &mut &[&'a str]) -> Result<Self, Error>;
-    fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
-        if !args.is_empty() {
-            Ok(Some(Self::parse(args)?))
-        } else {
-            Ok(None)
-        }
-    }
+    fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error>;
 }
 
 impl<'a> CommandArgs<'a> for &'a str {
-    fn parse(args: &mut &[&'a str]) -> Result<Self, Error> {
-        if let Some(s) = args.get(0) {
-            *args = &args[1..];
-            Ok(s)
-        } else {
-            Err(Error::Incompleted)
-        }
-    }
-
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if let Some(s) = args.get(0) {
             *args = &args[1..];
@@ -32,28 +16,13 @@ impl<'a> CommandArgs<'a> for &'a str {
 }
 
 impl<'a, T: CommandArgs<'a>> CommandArgs<'a> for Vec<T> {
-    fn parse(args: &mut &[&'a str]) -> Result<Self, Error> {
-        if args.is_empty() {
-            return Err(Error::Incompleted);
-        }
-
-        let mut result = Vec::new();
-        while !args.is_empty() {
-            let ele = T::parse(args)?;
-            result.push(ele);
-        }
-
-        Ok(result)
-    }
-
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if args.is_empty() {
             return Ok(None);
         }
 
         let mut result = Vec::new();
-        while !args.is_empty() {
-            let ele = T::parse(args)?;
+        while let Some(ele) = T::parse_maybe(args)? {
             result.push(ele);
         }
 
@@ -62,15 +31,6 @@ impl<'a, T: CommandArgs<'a>> CommandArgs<'a> for Vec<T> {
 }
 
 impl<'a> CommandArgs<'a> for usize {
-    fn parse(args: &mut &[&'a str]) -> Result<Self, Error> {
-        if let Some(s) = args.get(0) {
-            *args = &args[1..];
-            Ok(s.parse().map_err(|_| Error::Parse)?)
-        } else {
-            Err(Error::Incompleted)
-        }
-    }
-
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if let Some(s) = args.get(0) {
             *args = &args[1..];
@@ -87,7 +47,7 @@ pub trait CommandBuilder<'a> {
 
 #[derive(Debug)]
 pub enum Error {
-    Incompleted,
+    InvalidLength,
     Parse,
     TokenNotFound(&'static str),
 }
@@ -107,7 +67,7 @@ mod tests {
     #[test]
     fn test_parse_usize() {
         let args = ["1"];
-        let s = <usize as CommandArgs>::parse(&mut &args[..]).unwrap();
-        assert_eq!(s, 1);
+        let s = <usize as CommandArgs>::parse_maybe(&mut &args[..]).unwrap();
+        assert_eq!(s, Some(1));
     }
 }

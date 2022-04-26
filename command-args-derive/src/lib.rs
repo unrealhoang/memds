@@ -39,12 +39,8 @@ mod expand {
             .map(|a| a.parse_args::<LitStr>())
             .transpose()?;
         let name = &input.ident;
-        let parse_fn_content = parse_fn_content(&input, &token)?;
         let parse_maybe_fn_content = parse_maybe_fn_content(&input, &token)?;
         let parse_fn = quote! {
-            fn parse(args: &mut &[&#lifetime str]) -> Result<Self, ::command_args::Error> {
-                #parse_fn_content
-            }
             fn parse_maybe(args: &mut &[&#lifetime str]) -> Result<Option<Self>, ::command_args::Error> {
                 #parse_maybe_fn_content
             }
@@ -54,28 +50,6 @@ mod expand {
             impl #impl_generics_tok ::command_args::CommandArgs<#lifetime> for #name #ty_generics #where_clause {
                 #parse_fn
             }
-        })
-    }
-
-    fn parse_fn_content(input: &DeriveInput, token: &Option<LitStr>) -> Result<TokenStream> {
-        let parse_token = if let Some(token) = token {
-            let token_span = token.span();
-            quote_spanned! {token_span=>
-                match args.get(0) {
-                    Some(s) if s.eq_ignore_ascii_case(#token) => {
-                        *args = &args[1..];
-                    },
-                    _ => { return Err(::command_args::Error::TokenNotFound(#token)); }
-                }
-            }
-        } else {
-            TokenStream::new()
-        };
-        let (parse_fields, returned_struct) = fields_parse(input)?;
-        Ok(quote! {
-            #parse_token
-            #parse_fields
-            Ok(#returned_struct)
         })
     }
 
@@ -161,7 +135,8 @@ mod expand {
                     let #var_name = <#inner_ty as ::command_args::CommandArgs>::parse_maybe(args)?;
                 },
                 None => quote_spanned! {ty_span=>
-                    let #var_name = <#ty as ::command_args::CommandArgs>::parse(args)?;
+                    let #var_name = <#ty as ::command_args::CommandArgs>::parse_maybe(args)?
+                        .ok_or(::command_args::Error::InvalidLength)?;
                 },
             }
         });
@@ -186,7 +161,8 @@ mod expand {
                     let #var_name = <#inner_ty as ::command_args::CommandArgs>::parse_maybe(args)?;
                 },
                 None => quote_spanned! {ty_span=>
-                    let #var_name = <#ty as ::command_args::CommandArgs>::parse(args)?;
+                    let #var_name = <#ty as ::command_args::CommandArgs>::parse_maybe(args)?
+                        .ok_or(::command_args::Error::InvalidLength)?;
                 },
             }
         });
