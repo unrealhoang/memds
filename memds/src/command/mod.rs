@@ -6,6 +6,7 @@ use crate::{database::Database, Error};
 mod connection;
 mod string;
 mod set;
+mod admin;
 
 pub trait CommandHandler {
     type Output: Serialize;
@@ -74,7 +75,8 @@ fn parse_and_handle_main(
         self::string::GetCommand,
         self::string::SetCommand,
         self::set::SaddCommand,
-        self::set::SmembersCommand
+        self::set::SmembersCommand,
+        self::admin::SaveCommand
     });
 
     // not supported command

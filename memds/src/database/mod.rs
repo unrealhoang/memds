@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Mutex};
 
 use crate::{
     memds::{MemDS, StringDS, SetDS},
-    Error,
+    Error, storage,
 };
 
 pub struct Database {
@@ -11,8 +11,18 @@ pub struct Database {
 
 impl Database {
     pub fn new() -> Self {
-        Database {
-            data: Mutex::new(Default::default()),
+        match storage::load() {
+            Ok(d) => {
+                Database {
+                    data: Mutex::new(d),
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to load data: {}", e);
+                Database {
+                    data: Mutex::new(Default::default()),
+                }
+            }
         }
     }
 
@@ -55,5 +65,13 @@ impl Database {
             None => Ok(None),
             Some(set) => Ok(Some(set.set(key)?.members())),
         }
+    }
+
+    pub fn save(&self) -> Result<(), Error> {
+        let lock = self.data
+            .lock()
+            .unwrap();
+
+        storage::save(&lock)
     }
 }

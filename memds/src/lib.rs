@@ -1,6 +1,7 @@
 pub mod command;
 pub mod database;
 pub mod memds;
+pub mod storage;
 mod server;
 mod wal;
 
