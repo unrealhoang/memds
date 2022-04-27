@@ -1,16 +1,21 @@
 use std::collections::HashSet;
 
+use serde::{Serialize, Deserialize};
+
 use crate::Error;
 
+#[derive(Serialize, Deserialize)]
 pub enum MemDS {
     String(StringDS),
     Set(SetDS),
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct StringDS {
     s: String,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct SetDS {
     s: HashSet<String>,
 }
