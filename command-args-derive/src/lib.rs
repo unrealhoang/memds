@@ -84,9 +84,47 @@ mod expand {
     fn fields_parse(input: &DeriveInput) -> Result<(TokenStream, TokenStream)> {
         match &input.data {
             syn::Data::Struct(s) => Ok(struct_fields_parse(s)?),
-            syn::Data::Enum(_) => Err(Error::new(input.span(), "enum not supported")),
+            syn::Data::Enum(e) => Ok(enum_parse(e, input.span())?),
             syn::Data::Union(_) => Err(Error::new(input.span(), "union not supported")),
         }
+    }
+
+    fn enum_parse(e: &syn::DataEnum, e_span: Span) -> Result<(TokenStream, TokenStream)> {
+        let mut result = Vec::new();
+        for variant in &e.variants {
+            let token_path: Path = parse_quote!(argtoken);
+            let token = variant
+                .attrs
+                .iter()
+                .find(|a| a.path == token_path)
+                .map(|a| a.parse_args::<LitStr>())
+                .transpose()?;
+
+            let span = variant.span();
+            let name = LitStr::new(&variant.ident.to_string(), span);
+            let variant_token = token.unwrap_or(name);
+
+            result.push((variant_token, span, variant.ident.clone()));
+        }
+
+        let mut variant_matches = Vec::new();
+
+        for (variant_token, span, ident) in result {
+            variant_matches.push(quote_spanned! {span=>
+                Some(&#variant_token) => Self::#ident,
+            });
+        }
+
+        let parse_enum = quote_spanned! {e_span=>
+            let result = match args.get(0) {
+                #(#variant_matches)*
+                _ => return Ok(None)
+            };
+            *args = &args[1..];
+        };
+
+
+        Ok((parse_enum, quote!(result)))
     }
 
     fn struct_fields_parse(s: &syn::DataStruct) -> Result<(TokenStream, TokenStream)> {

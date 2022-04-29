@@ -1,3 +1,4 @@
+use command_args::CommandArgs;
 use command_args_derive::CommandArgsBlock;
 use deseresp::types::OkResponse;
 
@@ -19,12 +20,26 @@ impl<'a> CommandHandler for GetCommand<'a> {
     }
 }
 
-#[derive(Debug, CommandArgsBlock)]
+#[derive(CommandArgsBlock, Debug)]
 #[argtoken("SET")]
 pub struct SetCommand<'a> {
-    key: &'a str,
-    value: &'a str,
+  key: &'a str,
+  value: &'a str,
+  is_nx_xx: Option<NxOrXX>,
+  is_get: Option<SetGet>,
 }
+
+#[derive(CommandArgsBlock, Debug)]
+enum NxOrXX {
+  #[argtoken("NX")]
+  NX,
+  // use enum name if not provided #[argtoken]
+  XX
+}
+
+#[derive(CommandArgsBlock, Debug)]
+#[argtoken("GET")]
+struct SetGet;
 
 impl<'a> CommandHandler for SetCommand<'a> {
     type Output = OkResponse;
@@ -34,3 +49,4 @@ impl<'a> CommandHandler for SetCommand<'a> {
         Ok(OkResponse)
     }
 }
+
