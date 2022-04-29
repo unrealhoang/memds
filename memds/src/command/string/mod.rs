@@ -25,12 +25,13 @@ impl<'a> CommandHandler for GetCommand<'a> {
 pub struct SetCommand<'a> {
   key: &'a str,
   value: &'a str,
-  is_nx_xx: Option<NxOrXX>,
-  is_get: Option<SetGet>,
+  exists: Option<Exists>,
+  get: Option<SetGet>,
+  expire: Option<ExpireOption>
 }
 
 #[derive(CommandArgsBlock, Debug)]
-enum NxOrXX {
+enum Exists {
   #[argtoken("NX")]
   NX,
   // use enum name if not provided #[argtoken]
@@ -41,6 +42,19 @@ enum NxOrXX {
 #[argtoken("GET")]
 struct SetGet;
 
+#[derive(CommandArgsBlock, Debug)]
+enum ExpireOption {
+  #[argtoken("EX")]
+  ExpireAfterSecond(usize),
+  #[argtoken("PX")]
+  ExpireAfterMs(usize),
+  #[argtoken("EXAT")]
+  ExpireAtSecond(usize),
+  #[argtoken("PXAT")]
+  ExpireAtMs(usize),
+  KeepTTL,
+}
+
 impl<'a> CommandHandler for SetCommand<'a> {
     type Output = OkResponse;
 
@@ -50,3 +64,20 @@ impl<'a> CommandHandler for SetCommand<'a> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn test_parse_set() {
+        let cmd_str = vec!["SET", "a", "b", "NX", "GET", "EX", "20"];
+        let s = SetCommand::parse_maybe(&mut &cmd_str[..]).unwrap().unwrap();
+
+        assert_eq!(s.key, "a");
+        assert_eq!(s.value, "b");
+        assert_matches!(s.exists, Some(Exists::NX));
+        assert_matches!(s.get, Some(SetGet));
+        assert_matches!(s.expire, Some(ExpireOption::ExpireAfterSecond(20)));
+    }
+}
