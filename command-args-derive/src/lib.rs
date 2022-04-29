@@ -16,7 +16,7 @@ mod expand {
     use quote::{quote, quote_spanned};
     use syn::{
         parse_quote, spanned::Spanned, DeriveInput, Error, GenericArgument, GenericParam, Ident,
-        Lifetime, LifetimeDef, LitStr, Path, PathArguments, PathSegment, Result, Type, TypePath,
+        Lifetime, LifetimeDef, LitStr, Path, PathArguments, PathSegment, Result, Type, TypePath, Variant,
     };
 
     pub(crate) fn expand(input: DeriveInput) -> Result<TokenStream> {
@@ -31,15 +31,8 @@ mod expand {
         let (_, ty_generics, where_clause) = input.generics.split_for_impl();
         let (impl_generics_tok, _, _) = impl_generics.split_for_impl();
 
-        let token_path: Path = parse_quote!(argtoken);
-        let token = input
-            .attrs
-            .iter()
-            .find(|a| a.path == token_path)
-            .map(|a| a.parse_args::<LitStr>())
-            .transpose()?;
         let name = &input.ident;
-        let parse_maybe_fn_content = parse_maybe_fn_content(&input, &token)?;
+        let parse_maybe_fn_content = parse_maybe_fn_content(&input)?;
         let parse_fn = quote! {
             fn parse_maybe(args: &mut &[&#lifetime str]) -> Result<Option<Self>, ::command_args::Error> {
                 #parse_maybe_fn_content
@@ -53,7 +46,82 @@ mod expand {
         })
     }
 
-    fn parse_maybe_fn_content(input: &DeriveInput, token: &Option<LitStr>) -> Result<TokenStream> {
+    fn parse_maybe_fn_content(input: &DeriveInput) -> Result<TokenStream> {
+        match &input.data {
+            syn::Data::Struct(s) => Ok(struct_parse(s, input)?),
+            syn::Data::Enum(e) => Ok(enum_parse(e, input)?),
+            syn::Data::Union(_) => Err(Error::new(input.span(), "union not supported")),
+        }
+    }
+
+    /// Turns an enum into content of parse_maybe
+    fn enum_parse(e: &syn::DataEnum, input: &DeriveInput) -> Result<TokenStream> {
+        let mut result = Vec::new();
+        for variant in &e.variants {
+            let token_path: Path = parse_quote!(argtoken);
+            let token = variant
+                .attrs
+                .iter()
+                .find(|a| a.path == token_path)
+                .map(|a| a.parse_args::<LitStr>())
+                .transpose()?;
+
+            let name = LitStr::new(&variant.ident.to_string(), variant.span());
+            let variant_token = token.unwrap_or(name);
+
+            result.push((variant_token, variant));
+        }
+
+        let mut variant_matches = Vec::new();
+
+        for (variant_token, variant) in result {
+            variant_matches.push(enum_variant_parse(variant, variant_token)?);
+        }
+
+        let span = input.span();
+        Ok(quote_spanned! {span=>
+            let result = match args.get(0) {
+                #(#variant_matches)*
+                _ => None
+            };
+            if result.is_some() {
+                *args = &args[1..];
+            }
+
+            Ok(result)
+        })
+    }
+
+    /// Turns a variant to a match arm
+    /// ```rust
+    /// enum NxOrXx {
+    ///     Nx,
+    ///  // ^ current variant
+    ///     Xx,
+    /// }
+    /// ```
+    /// into
+    /// ```
+    /// Some(a) if a.eq_ignore_ascii_case("NX") => Some(Self::Nx)
+    /// ```
+    fn enum_variant_parse(variant: &Variant, variant_token: LitStr) -> Result<TokenStream> {
+        let span = variant.span();
+        let ident = &variant.ident;
+
+        Ok(quote_spanned! {span=>
+            Some(a) if a.eq_ignore_ascii_case(#variant_token) => Some(Self::#ident),
+        })
+    }
+
+    /// Turns a struct into content of parse_maybe
+    fn struct_parse(s: &syn::DataStruct, input: &DeriveInput) -> Result<TokenStream> {
+        let token_path: Path = parse_quote!(argtoken);
+        let token = input
+            .attrs
+            .iter()
+            .find(|a| a.path == token_path)
+            .map(|a| a.parse_args::<LitStr>())
+            .transpose()?;
         let parse_token = if let Some(token) = token {
             let token_span = token.span();
             quote_spanned! {token_span=>
@@ -73,68 +141,21 @@ mod expand {
                 }
             }
         };
-        let (parse_fields, returned_struct) = fields_parse(input)?;
-        Ok(quote! {
+        let parse_fields = match &s.fields {
+            syn::Fields::Named(named) => named_fields_parse(named),
+            syn::Fields::Unnamed(tuple) => unnamed_fields_parse(tuple),
+            syn::Fields::Unit => Ok(quote! { Ok(Some(Self)) }),
+        }?;
+
+        let span = input.span();
+        Ok(quote_spanned! {span=>
             #parse_token
             #parse_fields
-            Ok(Some(#returned_struct))
         })
     }
 
-    fn fields_parse(input: &DeriveInput) -> Result<(TokenStream, TokenStream)> {
-        match &input.data {
-            syn::Data::Struct(s) => Ok(struct_fields_parse(s)?),
-            syn::Data::Enum(e) => Ok(enum_parse(e, input.span())?),
-            syn::Data::Union(_) => Err(Error::new(input.span(), "union not supported")),
-        }
-    }
-
-    fn enum_parse(e: &syn::DataEnum, e_span: Span) -> Result<(TokenStream, TokenStream)> {
-        let mut result = Vec::new();
-        for variant in &e.variants {
-            let token_path: Path = parse_quote!(argtoken);
-            let token = variant
-                .attrs
-                .iter()
-                .find(|a| a.path == token_path)
-                .map(|a| a.parse_args::<LitStr>())
-                .transpose()?;
-
-            let span = variant.span();
-            let name = LitStr::new(&variant.ident.to_string(), span);
-            let variant_token = token.unwrap_or(name);
-
-            result.push((variant_token, span, variant.ident.clone()));
-        }
-
-        let mut variant_matches = Vec::new();
-
-        for (variant_token, span, ident) in result {
-            variant_matches.push(quote_spanned! {span=>
-                Some(&#variant_token) => Self::#ident,
-            });
-        }
-
-        let parse_enum = quote_spanned! {e_span=>
-            let result = match args.get(0) {
-                #(#variant_matches)*
-                _ => return Ok(None)
-            };
-            *args = &args[1..];
-        };
-
-
-        Ok((parse_enum, quote!(result)))
-    }
-
-    fn struct_fields_parse(s: &syn::DataStruct) -> Result<(TokenStream, TokenStream)> {
-        match &s.fields {
-            syn::Fields::Named(named) => named_fields_parse(named),
-            syn::Fields::Unnamed(tuple) => unnamed_fields_parse(tuple),
-            syn::Fields::Unit => Ok((TokenStream::new(), quote! { Self })),
-        }
-    }
-
+    // Get last path segment of a type
+    // ::std::option::Option<Abc> => Option<Abc>
     fn last_path_segment(ty: &Type) -> Option<&PathSegment> {
         match ty {
             &Type::Path(TypePath {
@@ -160,7 +181,7 @@ mod expand {
         }
     }
 
-    fn unnamed_fields_parse(unnamed: &syn::FieldsUnnamed) -> Result<(TokenStream, TokenStream)> {
+    fn unnamed_fields_parse(unnamed: &syn::FieldsUnnamed) -> Result<TokenStream> {
         let mut count = 0;
         let declare_vars = unnamed.unnamed.iter().map(|f| {
             let ty = &f.ty;
@@ -185,10 +206,15 @@ mod expand {
             count += 1;
             r
         });
-        Ok((quote!(#(#declare_vars)*), quote!(Self(#(#return_fields),*))))
+
+        let span = unnamed.span();
+        Ok(quote_spanned! {span =>
+            #(#declare_vars)*
+            Ok(Some(Self( #(#return_fields),* )))
+        })
     }
 
-    fn named_fields_parse(named: &syn::FieldsNamed) -> Result<(TokenStream, TokenStream)> {
+    fn named_fields_parse(named: &syn::FieldsNamed) -> Result<TokenStream> {
         let declare_vars = named.named.iter().map(|f| {
             let ty = &f.ty;
             let ty_span = f.ty.span();
@@ -206,9 +232,10 @@ mod expand {
         });
         let return_fields = named.named.iter().map(|f| f.ident.as_ref());
 
-        Ok((
-            quote!(#(#declare_vars)*),
-            quote!(Self { #(#return_fields),* }),
-        ))
+        let span = named.span();
+        Ok(quote_spanned! {span =>
+            #(#declare_vars)*
+            Ok(Some(Self { #(#return_fields),* }))
+        })
     }
 }
