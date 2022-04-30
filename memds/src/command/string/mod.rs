@@ -25,7 +25,7 @@ impl<'a> CommandHandler for GetCommand<'a> {
 pub struct SetCommand<'a> {
   key: &'a str,
   value: &'a str,
-  exists: Option<Exists>,
+  exists: Exists,
   get: Option<SetGet>,
   expire: Option<ExpireOption>
 }
@@ -33,9 +33,11 @@ pub struct SetCommand<'a> {
 #[derive(CommandArgsBlock, Debug)]
 enum Exists {
   #[argtoken("NX")]
-  NX,
-  // use enum name if not provided #[argtoken]
-  XX
+  NotExistedOnly,
+  #[argtoken("XX")]
+  ExistedOnly,
+  #[argnotoken]
+  Any,
 }
 
 #[derive(CommandArgsBlock, Debug)]
@@ -76,8 +78,17 @@ mod tests {
 
         assert_eq!(s.key, "a");
         assert_eq!(s.value, "b");
-        assert_matches!(s.exists, Some(Exists::NX));
+        assert_matches!(s.exists, Exists::NotExistedOnly);
         assert_matches!(s.get, Some(SetGet));
         assert_matches!(s.expire, Some(ExpireOption::ExpireAfterSecond(20)));
+
+        let cmd_str = vec!["SET", "a", "b", "PXAT", "20"];
+        let s = SetCommand::parse_maybe(&mut &cmd_str[..]).unwrap().unwrap();
+
+        assert_eq!(s.key, "a");
+        assert_eq!(s.value, "b");
+        assert_matches!(s.exists, Exists::Any);
+        assert_matches!(s.get, None);
+        assert_matches!(s.expire, Some(ExpireOption::ExpireAtMs(20)));
     }
 }

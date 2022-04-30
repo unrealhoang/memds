@@ -2,7 +2,7 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput, Error};
 
-#[proc_macro_derive(CommandArgsBlock, attributes(argtoken))]
+#[proc_macro_derive(CommandArgsBlock, attributes(argtoken, argnotoken))]
 pub fn derive_command_args_block(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -57,7 +57,22 @@ mod expand {
     /// Turns an enum into content of parse_maybe
     fn enum_parse(e: &syn::DataEnum, input: &DeriveInput) -> Result<TokenStream> {
         let mut result = Vec::new();
+        let mut notoken_variant = None;
+
         for variant in &e.variants {
+            let notoken_path: Path = parse_quote!(argnotoken);
+            let is_notoken_variant = variant
+                .attrs
+                .iter()
+                .any(|a| a.path == notoken_path);
+            if notoken_variant.is_some() && is_notoken_variant {
+                return Err(Error::new(variant.span(), "only one notoken variant allowed"));
+            }
+            if is_notoken_variant {
+                notoken_variant = Some(variant);
+                continue
+            }
+
             let token_path: Path = parse_quote!(argtoken);
             let token = variant
                 .attrs
@@ -69,20 +84,33 @@ mod expand {
             let name = LitStr::new(&variant.ident.to_string(), variant.span());
             let variant_token = token.unwrap_or(name);
 
-            result.push((variant_token, variant));
+
+
+            result.push((variant, variant_token));
         }
 
         let mut variant_matches = Vec::new();
 
-        for (variant_token, variant) in result {
+        for (variant, variant_token) in result {
             variant_matches.push(enum_variant_parse(variant, variant_token)?);
         }
 
         let span = input.span();
+        let catch_all_arm = if let Some(variant) = notoken_variant {
+            let notoken_span = variant.span();
+            let notoken_ident = &variant.ident;
+            quote_spanned! {notoken_span=>
+                _ => Some(Self::#notoken_ident),
+            }
+        } else {
+            quote_spanned! {span=>
+                _ => None,
+            }
+        };
         Ok(quote_spanned! {span=>
             let result = match args.get(0) {
                 #(#variant_matches)*
-                _ => None
+                #catch_all_arm
             };
 
             Ok(result)
