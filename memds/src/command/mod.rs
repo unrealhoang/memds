@@ -3,10 +3,10 @@ use serde::Serialize;
 
 use crate::{database::Database, Error};
 
-mod connection;
-mod string;
-mod set;
 mod admin;
+mod connection;
+mod set;
+mod string;
 
 pub trait CommandHandler {
     type Output: Serialize;

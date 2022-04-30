@@ -2,7 +2,7 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput, Error};
 
-#[proc_macro_derive(CommandArgsBlock, attributes(argtoken))]
+#[proc_macro_derive(CommandArgsBlock, attributes(argtoken, argnotoken))]
 pub fn derive_command_args_block(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -17,6 +17,7 @@ mod expand {
     use syn::{
         parse_quote, spanned::Spanned, DeriveInput, Error, GenericArgument, GenericParam, Ident,
         Lifetime, LifetimeDef, LitStr, Path, PathArguments, PathSegment, Result, Type, TypePath,
+        Variant,
     };
 
     pub(crate) fn expand(input: DeriveInput) -> Result<TokenStream> {
@@ -31,15 +32,8 @@ mod expand {
         let (_, ty_generics, where_clause) = input.generics.split_for_impl();
         let (impl_generics_tok, _, _) = impl_generics.split_for_impl();
 
-        let token_path: Path = parse_quote!(argtoken);
-        let token = input
-            .attrs
-            .iter()
-            .find(|a| a.path == token_path)
-            .map(|a| a.parse_args::<LitStr>())
-            .transpose()?;
         let name = &input.ident;
-        let parse_maybe_fn_content = parse_maybe_fn_content(&input, &token)?;
+        let parse_maybe_fn_content = parse_maybe_fn_content(&input)?;
         let parse_fn = quote! {
             fn parse_maybe(args: &mut &[&#lifetime str]) -> Result<Option<Self>, ::command_args::Error> {
                 #parse_maybe_fn_content
@@ -53,7 +47,138 @@ mod expand {
         })
     }
 
-    fn parse_maybe_fn_content(input: &DeriveInput, token: &Option<LitStr>) -> Result<TokenStream> {
+    fn parse_maybe_fn_content(input: &DeriveInput) -> Result<TokenStream> {
+        match &input.data {
+            syn::Data::Struct(s) => Ok(struct_parse(s, input)?),
+            syn::Data::Enum(e) => Ok(enum_parse(e, input)?),
+            syn::Data::Union(_) => Err(Error::new(input.span(), "union not supported")),
+        }
+    }
+
+    /// Turns an enum into content of parse_maybe
+    fn enum_parse(e: &syn::DataEnum, input: &DeriveInput) -> Result<TokenStream> {
+        let mut result = Vec::new();
+        let mut notoken_variant = None;
+
+        for variant in &e.variants {
+            let notoken_path: Path = parse_quote!(argnotoken);
+            let is_notoken_variant = variant.attrs.iter().any(|a| a.path == notoken_path);
+            if notoken_variant.is_some() && is_notoken_variant {
+                return Err(Error::new(
+                    variant.span(),
+                    "only one notoken variant allowed",
+                ));
+            }
+            if is_notoken_variant {
+                notoken_variant = Some(variant);
+                continue;
+            }
+
+            let token_path: Path = parse_quote!(argtoken);
+            let token = variant
+                .attrs
+                .iter()
+                .find(|a| a.path == token_path)
+                .map(|a| a.parse_args::<LitStr>())
+                .transpose()?;
+
+            let name = LitStr::new(&variant.ident.to_string(), variant.span());
+            let variant_token = token.unwrap_or(name);
+
+            result.push((variant, variant_token));
+        }
+
+        let mut variant_matches = Vec::new();
+
+        for (variant, variant_token) in result {
+            variant_matches.push(enum_variant_parse(variant, variant_token)?);
+        }
+
+        let span = input.span();
+        let catch_all_arm = if let Some(variant) = notoken_variant {
+            let notoken_span = variant.span();
+            let notoken_ident = &variant.ident;
+            quote_spanned! {notoken_span=>
+                _ => Some(Self::#notoken_ident),
+            }
+        } else {
+            quote_spanned! {span=>
+                _ => None,
+            }
+        };
+        Ok(quote_spanned! {span=>
+            let result = match args.get(0) {
+                #(#variant_matches)*
+                #catch_all_arm
+            };
+
+            Ok(result)
+        })
+    }
+
+    /// Turns a variant to a match arm
+    /// ```rust,ignore
+    /// enum NxOrXx {
+    ///     Nx,
+    ///  // ^ current variant
+    ///     Xx,
+    /// }
+    /// ```
+    /// into
+    /// ```rust,ignore
+    /// Some(a) if a.eq_ignore_ascii_case("NX") => Some(Self::Nx)
+    /// ```
+    fn enum_variant_parse(variant: &Variant, variant_token: LitStr) -> Result<TokenStream> {
+        let span = variant.span();
+        let ident = &variant.ident;
+
+        Ok(match &variant.fields {
+            syn::Fields::Named(named) => {
+                let (field_vars, field_returns) = named_fields_parse(named)?;
+                let span = named.span();
+
+                quote_spanned! {span=>
+                    Some(a) if a.eq_ignore_ascii_case(#variant_token) => {
+                        *args = &args[1..];
+                        #field_vars
+
+                        Some(Self::#ident {#field_returns})
+                    }
+                }
+            }
+            syn::Fields::Unnamed(tuple) => {
+                let (field_vars, field_returns) = unnamed_fields_parse(tuple)?;
+                let span = tuple.span();
+
+                quote_spanned! {span=>
+                    Some(a) if a.eq_ignore_ascii_case(#variant_token) => {
+                        *args = &args[1..];
+                        #field_vars
+
+                        Some(Self::#ident(#field_returns))
+                    }
+                }
+            }
+            syn::Fields::Unit => {
+                quote_spanned! {span=>
+                    Some(a) if a.eq_ignore_ascii_case(#variant_token) => {
+                        *args = &args[1..];
+                        Some(Self::#ident)
+                    }
+                }
+            }
+        })
+    }
+
+    /// Turns a struct into content of parse_maybe
+    fn struct_parse(s: &syn::DataStruct, input: &DeriveInput) -> Result<TokenStream> {
+        let token_path: Path = parse_quote!(argtoken);
+        let token = input
+            .attrs
+            .iter()
+            .find(|a| a.path == token_path)
+            .map(|a| a.parse_args::<LitStr>())
+            .transpose()?;
         let parse_token = if let Some(token) = token {
             let token_span = token.span();
             quote_spanned! {token_span=>
@@ -73,68 +198,39 @@ mod expand {
                 }
             }
         };
-        let (parse_fields, returned_struct) = fields_parse(input)?;
-        Ok(quote! {
+        let parse_fields: Result<TokenStream> = match &s.fields {
+            syn::Fields::Named(named) => {
+                let (field_vars, field_returns) = named_fields_parse(named)?;
+                let span = named.span();
+
+                Ok(quote_spanned! {span=>
+                    #field_vars
+                    Ok(Some(Self {#field_returns}))
+                })
+            }
+            syn::Fields::Unnamed(tuple) => {
+                let (field_vars, field_returns) = unnamed_fields_parse(tuple)?;
+                let span = tuple.span();
+
+                Ok(quote_spanned! {span=>
+                    #field_vars
+                    Ok(Some(Self(#field_returns)))
+                })
+            }
+
+            syn::Fields::Unit => Ok(quote! { Ok(Some(Self)) }),
+        };
+        let parse_fields = parse_fields?;
+
+        let span = input.span();
+        Ok(quote_spanned! {span=>
             #parse_token
             #parse_fields
-            Ok(Some(#returned_struct))
         })
     }
 
-    fn fields_parse(input: &DeriveInput) -> Result<(TokenStream, TokenStream)> {
-        match &input.data {
-            syn::Data::Struct(s) => Ok(struct_fields_parse(s)?),
-            syn::Data::Enum(e) => Ok(enum_parse(e, input.span())?),
-            syn::Data::Union(_) => Err(Error::new(input.span(), "union not supported")),
-        }
-    }
-
-    fn enum_parse(e: &syn::DataEnum, e_span: Span) -> Result<(TokenStream, TokenStream)> {
-        let mut result = Vec::new();
-        for variant in &e.variants {
-            let token_path: Path = parse_quote!(argtoken);
-            let token = variant
-                .attrs
-                .iter()
-                .find(|a| a.path == token_path)
-                .map(|a| a.parse_args::<LitStr>())
-                .transpose()?;
-
-            let span = variant.span();
-            let name = LitStr::new(&variant.ident.to_string(), span);
-            let variant_token = token.unwrap_or(name);
-
-            result.push((variant_token, span, variant.ident.clone()));
-        }
-
-        let mut variant_matches = Vec::new();
-
-        for (variant_token, span, ident) in result {
-            variant_matches.push(quote_spanned! {span=>
-                Some(&#variant_token) => Self::#ident,
-            });
-        }
-
-        let parse_enum = quote_spanned! {e_span=>
-            let result = match args.get(0) {
-                #(#variant_matches)*
-                _ => return Ok(None)
-            };
-            *args = &args[1..];
-        };
-
-
-        Ok((parse_enum, quote!(result)))
-    }
-
-    fn struct_fields_parse(s: &syn::DataStruct) -> Result<(TokenStream, TokenStream)> {
-        match &s.fields {
-            syn::Fields::Named(named) => named_fields_parse(named),
-            syn::Fields::Unnamed(tuple) => unnamed_fields_parse(tuple),
-            syn::Fields::Unit => Ok((TokenStream::new(), quote! { Self })),
-        }
-    }
-
+    // Get last path segment of a type
+    // ::std::option::Option<Abc> => Option<Abc>
     fn last_path_segment(ty: &Type) -> Option<&PathSegment> {
         match ty {
             &Type::Path(TypePath {
@@ -160,23 +256,32 @@ mod expand {
         }
     }
 
+    /// Turns Unamed fields into code to parse each field element
+    /// and list of return field. i.e.
+    /// ```rust,ignore
+    /// struct A(
+    ///   B,
+    ///   D
+    /// )
+    /// ```
+    /// =>
+    /// (
+    /// ```rust,ignore
+    ///     let field_0 = <B as ::command_args::CommandArgs>::parse_maybe(args)?
+    ///         .ok_or(::command_args::Error::InvalidLength)?;
+    ///     let field_1 = <D as ::command_args::CommandArgs>::parse_maybe(args)?
+    ///         .ok_or(::command_args::Error::InvalidLength)?;
+    /// ```,
+    /// ```rust,ignore
+    ///     field0, field1
+    /// ```
+    /// )
     fn unnamed_fields_parse(unnamed: &syn::FieldsUnnamed) -> Result<(TokenStream, TokenStream)> {
         let mut count = 0;
         let declare_vars = unnamed.unnamed.iter().map(|f| {
-            let ty = &f.ty;
-            let ty_span = f.ty.span();
-            let var_name = Ident::new(&format!("field_{}", count), ty_span);
+            let var_name = Ident::new(&format!("field_{}", count), f.ty.span());
             count += 1;
-
-            match option_inner_type(ty) {
-                Some(inner_ty) => quote_spanned! {ty_span=>
-                    let #var_name = <#inner_ty as ::command_args::CommandArgs>::parse_maybe(args)?;
-                },
-                None => quote_spanned! {ty_span=>
-                    let #var_name = <#ty as ::command_args::CommandArgs>::parse_maybe(args)?
-                        .ok_or(::command_args::Error::InvalidLength)?;
-                },
-            }
+            parse_field_from_type(&f.ty, &var_name)
         });
 
         let mut count = 0;
@@ -185,30 +290,81 @@ mod expand {
             count += 1;
             r
         });
-        Ok((quote!(#(#declare_vars)*), quote!(Self(#(#return_fields),*))))
+
+        let span = unnamed.span();
+        Ok((
+            quote_spanned! {span =>
+                #(#declare_vars)*
+            },
+            quote_spanned! {span =>
+                #(#return_fields),*
+            },
+        ))
     }
 
+    /// Turns Unamed fields into code to parse each field element
+    /// and list of return field. i.e.
+    /// ```rust,ignore
+    /// struct A {
+    ///   b: B,
+    ///   d: D,
+    /// }
+    /// ```
+    /// =>
+    /// (
+    /// ```rust,ignore
+    ///     let b = <B as ::command_args::CommandArgs>::parse_maybe(args)?
+    ///         .ok_or(::command_args::Error::InvalidLength)?;
+    ///     let d = <D as ::command_args::CommandArgs>::parse_maybe(args)?
+    ///         .ok_or(::command_args::Error::InvalidLength)?;
+    /// ```,
+    /// ```rust,ignore
+    ///     b, d
+    /// ```
+    /// )
     fn named_fields_parse(named: &syn::FieldsNamed) -> Result<(TokenStream, TokenStream)> {
         let declare_vars = named.named.iter().map(|f| {
-            let ty = &f.ty;
-            let ty_span = f.ty.span();
             let var_name = f.ident.as_ref().unwrap();
-
-            match option_inner_type(ty) {
-                Some(inner_ty) => quote_spanned! {ty_span=>
-                    let #var_name = <#inner_ty as ::command_args::CommandArgs>::parse_maybe(args)?;
-                },
-                None => quote_spanned! {ty_span=>
-                    let #var_name = <#ty as ::command_args::CommandArgs>::parse_maybe(args)?
-                        .ok_or(::command_args::Error::InvalidLength)?;
-                },
-            }
+            parse_field_from_type(&f.ty, var_name)
         });
         let return_fields = named.named.iter().map(|f| f.ident.as_ref());
 
+        let span = named.span();
         Ok((
-            quote!(#(#declare_vars)*),
-            quote!(Self { #(#return_fields),* }),
+            quote_spanned! {span =>
+                #(#declare_vars)*
+            },
+            quote_spanned! {span =>
+                #(#return_fields),*
+            },
         ))
+    }
+
+    /// Turn a type and a var name to code to parse
+    /// ty: `B`
+    /// var_name: `b`
+    /// =>
+    /// ```rust,ignore
+    ///     let b = <B as ::command_args::CommandArgs>::parse_maybe(args)?
+    ///         .ok_or(::command_args::Error::InvalidLength)?;
+    /// ```
+    /// ty: `Option<B>`
+    /// var_name: `field_0`
+    /// =>
+    /// ```rust,ignore
+    ///     let field_0 = <B as ::command_args::CommandArgs>::parse_maybe(args)?;
+    /// ```
+    ///
+    fn parse_field_from_type(ty: &Type, var_name: &Ident) -> TokenStream {
+        let ty_span = ty.span();
+        match option_inner_type(ty) {
+            Some(inner_ty) => quote_spanned! {ty_span=>
+                let #var_name = <#inner_ty as ::command_args::CommandArgs>::parse_maybe(args)?;
+            },
+            None => quote_spanned! {ty_span=>
+                let #var_name = <#ty as ::command_args::CommandArgs>::parse_maybe(args)?
+                    .ok_or(::command_args::Error::InvalidLength)?;
+            },
+        }
     }
 }
