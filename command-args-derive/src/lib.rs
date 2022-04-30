@@ -84,8 +84,6 @@ mod expand {
             let name = LitStr::new(&variant.ident.to_string(), variant.span());
             let variant_token = token.unwrap_or(name);
 
-
-
             result.push((variant, variant_token));
         }
 
