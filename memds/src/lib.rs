@@ -1,8 +1,8 @@
 pub mod command;
 pub mod database;
 pub mod memds;
-pub mod storage;
 mod server;
+pub mod storage;
 mod wal;
 
 use std::fmt::Display;

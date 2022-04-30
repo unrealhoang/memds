@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::Error;
 
@@ -57,9 +57,7 @@ impl SetDS {
     pub fn from<S: ToString>(s: S) -> Self {
         let mut set = HashSet::new();
         set.insert(s.to_string());
-        Self {
-            s: set
-        }
+        Self { s: set }
     }
 
     pub fn add<E, S>(&mut self, elements: E) -> usize
@@ -84,6 +82,8 @@ impl SetDS {
 
 impl Default for SetDS {
     fn default() -> Self {
-        Self { s: Default::default() }
+        Self {
+            s: Default::default(),
+        }
     }
 }

@@ -16,7 +16,8 @@ mod expand {
     use quote::{quote, quote_spanned};
     use syn::{
         parse_quote, spanned::Spanned, DeriveInput, Error, GenericArgument, GenericParam, Ident,
-        Lifetime, LifetimeDef, LitStr, Path, PathArguments, PathSegment, Result, Type, TypePath, Variant,
+        Lifetime, LifetimeDef, LitStr, Path, PathArguments, PathSegment, Result, Type, TypePath,
+        Variant,
     };
 
     pub(crate) fn expand(input: DeriveInput) -> Result<TokenStream> {
@@ -61,16 +62,16 @@ mod expand {
 
         for variant in &e.variants {
             let notoken_path: Path = parse_quote!(argnotoken);
-            let is_notoken_variant = variant
-                .attrs
-                .iter()
-                .any(|a| a.path == notoken_path);
+            let is_notoken_variant = variant.attrs.iter().any(|a| a.path == notoken_path);
             if notoken_variant.is_some() && is_notoken_variant {
-                return Err(Error::new(variant.span(), "only one notoken variant allowed"));
+                return Err(Error::new(
+                    variant.span(),
+                    "only one notoken variant allowed",
+                ));
             }
             if is_notoken_variant {
                 notoken_variant = Some(variant);
-                continue
+                continue;
             }
 
             let token_path: Path = parse_quote!(argtoken);
@@ -290,13 +291,15 @@ mod expand {
             r
         });
 
-
         let span = unnamed.span();
-        Ok((quote_spanned! {span =>
-            #(#declare_vars)*
-        }, quote_spanned! {span =>
-            #(#return_fields),*
-        }))
+        Ok((
+            quote_spanned! {span =>
+                #(#declare_vars)*
+            },
+            quote_spanned! {span =>
+                #(#return_fields),*
+            },
+        ))
     }
 
     /// Turns Unamed fields into code to parse each field element
@@ -327,11 +330,14 @@ mod expand {
         let return_fields = named.named.iter().map(|f| f.ident.as_ref());
 
         let span = named.span();
-        Ok((quote_spanned! {span =>
-            #(#declare_vars)*
-        }, quote_spanned! {span =>
-            #(#return_fields),*
-        }))
+        Ok((
+            quote_spanned! {span =>
+                #(#declare_vars)*
+            },
+            quote_spanned! {span =>
+                #(#return_fields),*
+            },
+        ))
     }
 
     /// Turn a type and a var name to code to parse

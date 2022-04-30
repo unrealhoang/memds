@@ -1,4 +1,4 @@
-use command_args::CommandArgs;
+
 use command_args_derive::CommandArgsBlock;
 use deseresp::types::OkResponse;
 
@@ -23,21 +23,21 @@ impl<'a> CommandHandler for GetCommand<'a> {
 #[derive(CommandArgsBlock, Debug)]
 #[argtoken("SET")]
 pub struct SetCommand<'a> {
-  key: &'a str,
-  value: &'a str,
-  exists: Exists,
-  get: Option<SetGet>,
-  expire: Option<ExpireOption>
+    key: &'a str,
+    value: &'a str,
+    exists: Exists,
+    get: Option<SetGet>,
+    expire: Option<ExpireOption>,
 }
 
 #[derive(CommandArgsBlock, Debug)]
 enum Exists {
-  #[argtoken("NX")]
-  NotExistedOnly,
-  #[argtoken("XX")]
-  ExistedOnly,
-  #[argnotoken]
-  Any,
+    #[argtoken("NX")]
+    NotExistedOnly,
+    #[argtoken("XX")]
+    ExistedOnly,
+    #[argnotoken]
+    Any,
 }
 
 #[derive(CommandArgsBlock, Debug)]
@@ -46,15 +46,15 @@ struct SetGet;
 
 #[derive(CommandArgsBlock, Debug)]
 enum ExpireOption {
-  #[argtoken("EX")]
-  ExpireAfterSecond(usize),
-  #[argtoken("PX")]
-  ExpireAfterMs(usize),
-  #[argtoken("EXAT")]
-  ExpireAtSecond(usize),
-  #[argtoken("PXAT")]
-  ExpireAtMs(usize),
-  KeepTTL,
+    #[argtoken("EX")]
+    ExpireAfterSecond(usize),
+    #[argtoken("PX")]
+    ExpireAfterMs(usize),
+    #[argtoken("EXAT")]
+    ExpireAtSecond(usize),
+    #[argtoken("PXAT")]
+    ExpireAtMs(usize),
+    KeepTTL,
 }
 
 impl<'a> CommandHandler for SetCommand<'a> {
@@ -70,6 +70,7 @@ impl<'a> CommandHandler for SetCommand<'a> {
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
+    use command_args::CommandArgs;
 
     #[test]
     fn test_parse_set() {

@@ -1,8 +1,8 @@
 use std::{collections::HashMap, sync::Mutex};
 
 use crate::{
-    memds::{MemDS, StringDS, SetDS},
-    Error, storage,
+    memds::{MemDS, SetDS, StringDS},
+    storage, Error,
 };
 
 pub struct Database {
@@ -12,11 +12,9 @@ pub struct Database {
 impl Database {
     pub fn new() -> Self {
         match storage::load() {
-            Ok(d) => {
-                Database {
-                    data: Mutex::new(d),
-                }
-            }
+            Ok(d) => Database {
+                data: Mutex::new(d),
+            },
             Err(e) => {
                 tracing::error!("Failed to load data: {}", e);
                 Database {
@@ -45,9 +43,7 @@ impl Database {
     }
 
     pub fn sadd(&self, key: &str, elements: &[&str]) -> Result<usize, Error> {
-        let mut lock = self.data
-            .lock()
-            .unwrap();
+        let mut lock = self.data.lock().unwrap();
         let set = lock
             .entry(key.to_string())
             .or_insert_with(|| MemDS::Set(SetDS::default()));
@@ -57,9 +53,7 @@ impl Database {
     }
 
     pub fn smembers(&self, key: &str) -> Result<Option<Vec<String>>, Error> {
-        let lock = self.data
-            .lock()
-            .unwrap();
+        let lock = self.data.lock().unwrap();
 
         match lock.get(key) {
             None => Ok(None),
@@ -68,9 +62,7 @@ impl Database {
     }
 
     pub fn save(&self) -> Result<(), Error> {
-        let lock = self.data
-            .lock()
-            .unwrap();
+        let lock = self.data.lock().unwrap();
 
         storage::save(&lock)
     }
