@@ -1,4 +1,3 @@
-
 use command_args_derive::CommandArgsBlock;
 use deseresp::types::OkResponse;
 

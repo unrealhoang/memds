@@ -4,10 +4,7 @@ use bytes::{Buf, BytesMut};
 use serde::Deserialize;
 use tokio::{
     io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    net::{
-        tcp::OwnedReadHalf,
-        TcpListener, TcpStream,
-    },
+    net::{tcp::OwnedReadHalf, TcpListener, TcpStream},
 };
 
 use crate::database::Database;
