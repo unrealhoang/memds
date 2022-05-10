@@ -57,7 +57,7 @@ mod expand {
 
     /// Turns an enum into content of parse_maybe
     fn enum_parse(e: &syn::DataEnum, input: &DeriveInput) -> Result<TokenStream> {
-        let mut result = Vec::new();
+        let mut variants = Vec::new();
         let mut notoken_variant = None;
 
         for variant in &e.variants {
@@ -85,12 +85,12 @@ mod expand {
             let name = LitStr::new(&variant.ident.to_string(), variant.span());
             let variant_token = token.unwrap_or(name);
 
-            result.push((variant, variant_token));
+            variants.push((variant, variant_token));
         }
 
         let mut variant_matches = Vec::new();
 
-        for (variant, variant_token) in result {
+        for (variant, variant_token) in variants {
             variant_matches.push(enum_variant_parse(variant, variant_token)?);
         }
 
