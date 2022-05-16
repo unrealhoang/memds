@@ -1,10 +1,16 @@
-use std::fmt::Display;
+use std::{fmt::{Write as _, Display}, io::{Write, self}};
 
 pub trait CommandArgs<'a>: Sized {
+    // fn encode<W: Write>(&self, target: &mut W) -> Result<(), Error>;
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error>;
 }
 
 impl<'a> CommandArgs<'a> for &'a str {
+    // fn encode<W: Write>(&self, target: &mut W) -> Result<(), Error> {
+    //     target.write_all(self.as_bytes())
+    //         .map_err(|e| Error::Write(e))
+    // }
+
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if let Some(s) = args.get(0) {
             *args = &args[1..];
@@ -16,6 +22,19 @@ impl<'a> CommandArgs<'a> for &'a str {
 }
 
 impl<'a, T: CommandArgs<'a>> CommandArgs<'a> for Vec<T> {
+    // fn encode<W: Write>(&self, target: &mut W) -> Result<(), Error> {
+    //     let mut first = true;
+    //     for ele in self.iter() {
+    //         ele.encode(target)?;
+    //         if !first {
+    //             target.write_all(b" ").map_err(|e| Error::Write(e))?;
+    //         }
+    //         first = true;
+    //     }
+
+    //     Ok(())
+    // }
+
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if args.is_empty() {
             return Ok(None);
@@ -31,6 +50,11 @@ impl<'a, T: CommandArgs<'a>> CommandArgs<'a> for Vec<T> {
 }
 
 impl<'a> CommandArgs<'a> for usize {
+    // fn encode<W: Write>(&self, target: &mut W) -> Result<(), Error> {
+    //     write!(target, "{}", self)
+    //         .map_err(|e| Error::Write(e))
+    // }
+
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if let Some(s) = args.get(0) {
             *args = &args[1..];
@@ -47,6 +71,7 @@ pub trait CommandBuilder<'a> {
 
 #[derive(Debug)]
 pub enum Error {
+    Write(io::Error),
     InvalidLength,
     Parse,
     TokenNotFound(&'static str),
