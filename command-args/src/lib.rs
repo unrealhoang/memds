@@ -1,15 +1,15 @@
-use std::{fmt::{Write as _, Display}, io::{Write, self}};
+use std::fmt::Display;
 
 pub trait CommandArgs<'a>: Sized {
-    // fn encode<W: Write>(&self, target: &mut W) -> Result<(), Error>;
+    fn encode(&self, target: &mut Vec<String>) -> Result<(), Error>;
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error>;
 }
 
 impl<'a> CommandArgs<'a> for &'a str {
-    // fn encode<W: Write>(&self, target: &mut W) -> Result<(), Error> {
-    //     target.write_all(self.as_bytes())
-    //         .map_err(|e| Error::Write(e))
-    // }
+    fn encode(&self, target: &mut Vec<String>) -> Result<(), Error> {
+        target.push(self.to_string());
+        Ok(())
+    }
 
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if let Some(s) = args.get(0) {
@@ -22,18 +22,13 @@ impl<'a> CommandArgs<'a> for &'a str {
 }
 
 impl<'a, T: CommandArgs<'a>> CommandArgs<'a> for Vec<T> {
-    // fn encode<W: Write>(&self, target: &mut W) -> Result<(), Error> {
-    //     let mut first = true;
-    //     for ele in self.iter() {
-    //         ele.encode(target)?;
-    //         if !first {
-    //             target.write_all(b" ").map_err(|e| Error::Write(e))?;
-    //         }
-    //         first = true;
-    //     }
+    fn encode(&self, target: &mut Vec<String>) -> Result<(), Error> {
+        for ele in self.iter() {
+            ele.encode(target)?;
+        }
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if args.is_empty() {
@@ -50,10 +45,10 @@ impl<'a, T: CommandArgs<'a>> CommandArgs<'a> for Vec<T> {
 }
 
 impl<'a> CommandArgs<'a> for usize {
-    // fn encode<W: Write>(&self, target: &mut W) -> Result<(), Error> {
-    //     write!(target, "{}", self)
-    //         .map_err(|e| Error::Write(e))
-    // }
+    fn encode(&self, target: &mut Vec<String>) -> Result<(), Error> {
+        target.push(format!("{}", self));
+        Ok(())
+    }
 
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if let Some(s) = args.get(0) {
@@ -71,7 +66,6 @@ pub trait CommandBuilder<'a> {
 
 #[derive(Debug)]
 pub enum Error {
-    Write(io::Error),
     InvalidLength,
     Parse,
     TokenNotFound(&'static str),

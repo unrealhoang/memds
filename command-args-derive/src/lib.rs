@@ -16,7 +16,7 @@ mod expand {
     use quote::{quote, quote_spanned};
     use syn::{
         parse_quote, spanned::Spanned, DeriveInput, Error, GenericArgument, GenericParam, Ident,
-        Lifetime, LifetimeDef, LitStr, Path, PathArguments, PathSegment, Result, Type, TypePath,
+        Lifetime, LifetimeDef, LitStr, Path, PathArguments, PathSegment, Result, Type, TypePath, ExprField, Expr, ExprPath,
     };
 
     pub(crate) fn expand(input: DeriveInput) -> Result<TokenStream> {
@@ -42,10 +42,152 @@ mod expand {
             }
         };
 
+        let encode_fn_content = encode_fn_content(&data_model)?;
+        let encode_fn = quote! {
+            fn encode(&self, target: &mut Vec<String>) -> Result<(), ::command_args::Error> {
+                #encode_fn_content
+            }
+        };
+
         Ok(quote! {
             impl #impl_generics_tok ::command_args::CommandArgs<#lifetime> for #name #ty_generics #where_clause {
+                #encode_fn
+
                 #parse_fn
             }
+        })
+    }
+
+    fn encode_fn_content(data_model: &DataModel) -> Result<TokenStream> {
+        match &data_model.data_type {
+            DataType::Enum(e) => {
+                let span = data_model.span;
+                let encode_variants_match_arms = e.variants.iter().map(|v| {
+                    encode_variant_match_arm(v)
+                }).collect::<Result<Vec<_>>>()?;
+                let notoken_catch_arm = e.notoken_variant.as_ref().map(|v| {
+                    let span = v.span;
+                    let variant_ident = &v.name;
+                    quote_spanned! {span=>
+                        Self::#variant_ident => {}
+                    }
+                });
+
+                Ok(quote_spanned! {span=>
+                    match self {
+                        #(#encode_variants_match_arms)*
+                        #notoken_catch_arm
+                    }
+
+                    Ok(())
+                })
+            },
+            DataType::Struct(s) => encode_struct(s, data_model.span),
+        }
+    }
+
+    fn encode_variant_match_arm(v: &Variant) -> Result<TokenStream> {
+        let span = v.span;
+        let variant_ident = &v.name;
+        let token = &v.token;
+
+        match &v.fields {
+            Fields::Unit => {
+                Ok(quote_spanned! {span=>
+                    Self::#variant_ident => {
+                        #token.encode(target)?;
+                    }
+                })
+            },
+            Fields::Unnamed(t) => {
+                let mut field_paths = Vec::new();
+                let encode_tuple_fields = t.unnamed.iter().enumerate().map(|(i, f)| {
+                    let var_name = Ident::new(&format!("t{}", i), f.span());
+                    let field: ExprPath = parse_quote! { #var_name };
+                    field_paths.push(field.clone());
+
+                    encode_field(&field.into(), &f.ty)
+                }).collect::<Result<Vec<_>>>()?;
+
+                Ok(quote_spanned! {span=>
+                    Self::#variant_ident( #(#field_paths)* ) => {
+                        #token.encode(target)?;
+                        #(#encode_tuple_fields)*
+                    }
+                })
+            },
+            Fields::Named(s) => {
+                let mut field_paths = Vec::new();
+                let encode_tuple_fields = s.named.iter().map(|f| {
+                    let var_name = &f.ident;
+                    let field: ExprPath = parse_quote! { #var_name };
+                    field_paths.push(field.clone());
+
+                    encode_field(&field.into(), &f.ty)
+                }).collect::<Result<Vec<_>>>()?;
+
+                Ok(quote_spanned! {span=>
+                    Self::#variant_ident{ #(#field_paths),* } => {
+                        #token.encode(target)?;
+                        #(#encode_tuple_fields)*
+                    }
+                })
+            },
+        }
+    }
+
+    fn encode_struct(s: &Struct, span: Span) -> Result<TokenStream> {
+        let encode_token = s.token.as_ref().map(|tok| {
+            quote_spanned! {span=>
+                #tok.encode(target)?;
+            }
+        });
+        let encode_fields = match &s.fields {
+            Fields::Unit => { TokenStream::new() },
+            Fields::Unnamed(u) => {
+                // if has token then prepend whitespace
+                let encode_tuple_fields = u.unnamed.iter().enumerate().map(|(i, f)| {
+                    let field: ExprField = parse_quote! { self.#i };
+                    encode_field(&field.into(), &f.ty)
+                }).collect::<Result<Vec<_>>>()?;
+
+                quote_spanned! {span=>
+                    #(#encode_tuple_fields)*
+                }
+            },
+            Fields::Named(s) => {
+                // if has token then prepend whitespace
+                let encode_struct_fields = s.named.iter().map(|f| {
+                    let ident = &f.ident;
+                    let field: ExprField = parse_quote! { self.#ident };
+                    encode_field(&field.into(), &f.ty)
+                }).collect::<Result<Vec<_>>>()?;
+
+                quote_spanned! {span=>
+                    #(#encode_struct_fields)*
+                }
+            },
+        };
+
+        Ok(quote_spanned! {span=>
+            #encode_token
+            #encode_fields
+
+            Ok(())
+        })
+    }
+
+    fn encode_field(field_expr: &Expr, ty: &Type) -> Result<TokenStream> {
+        let ty_span = ty.span();
+        Ok(match option_inner_type(ty) {
+            Some(inner_ty) => quote_spanned! {ty_span=>
+                if let Some(s) = &#field_expr {
+                    <#inner_ty as ::command_args::CommandArgs>::encode(s, target)?;
+                }
+            },
+            None => quote_spanned! {ty_span=>
+                <#ty as ::command_args::CommandArgs>::encode(&#field_expr, target)?;
+            },
         })
     }
 
