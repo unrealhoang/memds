@@ -1,6 +1,9 @@
-use bytes::{BytesMut, Buf};
+use bytes::{Buf, BytesMut};
 use serde::Deserialize;
-use tokio::{net::tcp::OwnedReadHalf, io::{AsyncWrite, AsyncWriteExt, AsyncReadExt}};
+use tokio::{
+    io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    net::tcp::OwnedReadHalf,
+};
 
 fn parse<'a, D: Deserialize<'a>>(read_buf: &'a mut BytesMut) -> anyhow::Result<Option<(D, usize)>> {
     let mut deserializer = deseresp::from_slice(read_buf);
@@ -14,10 +17,10 @@ fn parse<'a, D: Deserialize<'a>>(read_buf: &'a mut BytesMut) -> anyhow::Result<O
         Err(e) => {
             tracing::error!(
                 "Error parsing command: {}, e: {}",
-                std::str::from_utf8(&read_buf).unwrap_or(&String::from("invalid utf8")),
+                std::str::from_utf8(read_buf).unwrap_or(&String::from("invalid utf8")),
                 e
             );
-            return Err(e.into());
+            Err(e.into())
         }
     }
 }

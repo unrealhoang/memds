@@ -111,7 +111,9 @@ mod tests {
         assert_eq!(expected, target);
         let target_ref = target.iter().map(String::as_str).collect::<Vec<_>>();
 
-        let source = SetCommand::parse_maybe(&mut &target_ref[..]).unwrap().unwrap();
+        let source = SetCommand::parse_maybe(&mut &target_ref[..])
+            .unwrap()
+            .unwrap();
         assert_eq!(source, s);
     }
 }

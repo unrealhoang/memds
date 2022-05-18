@@ -1,9 +1,9 @@
+pub mod client;
 pub mod command;
+pub mod connection;
 pub mod database;
 pub mod memds;
-pub mod connection;
 mod server;
-pub mod client;
 pub mod storage;
 mod wal;
 

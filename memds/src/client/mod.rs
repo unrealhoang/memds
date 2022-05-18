@@ -1,9 +1,12 @@
 use anyhow::Context;
 use command_args::CommandArgs;
-use serde::{Serialize, de::DeserializeOwned};
-use tokio::net::{TcpStream, tcp::OwnedWriteHalf};
+use serde::{de::DeserializeOwned, Serialize};
+use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
 
-use crate::{connection::{FrameReader, flush}, command::CommandHandler};
+use crate::{
+    command::CommandHandler,
+    connection::{flush, FrameReader},
+};
 
 pub struct Client {
     frame_reader: FrameReader,
@@ -27,23 +30,28 @@ impl Client {
         }
     }
 
-    pub async fn execute<'a, C>(&mut self, command: &C) -> anyhow::Result<<C as CommandHandler>::Output>
+    pub async fn execute<'a, C>(
+        &mut self,
+        command: &C,
+    ) -> anyhow::Result<<C as CommandHandler>::Output>
     where
         C: CommandHandler + CommandArgs<'a>,
         <C as CommandHandler>::Output: DeserializeOwned,
     {
         self.command_buf.clear();
-        command.encode(&mut self.command_buf)
+        command
+            .encode(&mut self.command_buf)
             .context("Failed to encode command")?;
 
         let mut serializer = deseresp::from_write(&mut self.write_buf);
-        self.command_buf.serialize(&mut serializer)
+        self.command_buf
+            .serialize(&mut serializer)
             .context("Failed to serialize command to RESP")?;
 
         flush(&mut self.writer, &mut self.write_buf).await;
 
         loop {
-            while let Some(resp) = self.frame_reader.next_buffered_frame::<C::Output>()? {
+            if let Some(resp) = self.frame_reader.next_buffered_frame::<C::Output>()? {
                 return Ok(resp);
             }
             let read_bytes = self.frame_reader.read_to_buf().await?;

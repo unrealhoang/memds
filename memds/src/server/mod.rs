@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::{database::Database, connection::{FrameReader, flush}};
+use crate::{
+    connection::{flush, FrameReader},
+    database::Database,
+};
 
 /// 100KB buffer size for pipelined write
 const WRITE_BUF_SIZE_LIMIT: usize = 1024 * 100;

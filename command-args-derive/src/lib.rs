@@ -15,8 +15,9 @@ mod expand {
     use proc_macro2::{Span, TokenStream};
     use quote::{quote, quote_spanned};
     use syn::{
-        parse_quote, spanned::Spanned, DeriveInput, Error, GenericArgument, GenericParam, Ident,
-        Lifetime, LifetimeDef, LitStr, Path, PathArguments, PathSegment, Result, Type, TypePath, ExprField, Expr, ExprPath,
+        parse_quote, spanned::Spanned, DeriveInput, Error, Expr, ExprField, ExprPath,
+        GenericArgument, GenericParam, Ident, Lifetime, LifetimeDef, LitStr, Path, PathArguments,
+        PathSegment, Result, Type, TypePath,
     };
 
     pub(crate) fn expand(input: DeriveInput) -> Result<TokenStream> {
@@ -62,9 +63,11 @@ mod expand {
         match &data_model.data_type {
             DataType::Enum(e) => {
                 let span = data_model.span;
-                let encode_variants_match_arms = e.variants.iter().map(|v| {
-                    encode_variant_match_arm(v)
-                }).collect::<Result<Vec<_>>>()?;
+                let encode_variants_match_arms = e
+                    .variants
+                    .iter()
+                    .map(encode_variant_match_arm)
+                    .collect::<Result<Vec<_>>>()?;
                 let notoken_catch_arm = e.notoken_variant.as_ref().map(|v| {
                     let span = v.span;
                     let variant_ident = &v.name;
@@ -81,7 +84,7 @@ mod expand {
 
                     Ok(())
                 })
-            },
+            }
             DataType::Struct(s) => encode_struct(s, data_model.span),
         }
     }
@@ -92,22 +95,25 @@ mod expand {
         let token = &v.token;
 
         match &v.fields {
-            Fields::Unit => {
-                Ok(quote_spanned! {span=>
-                    Self::#variant_ident => {
-                        #token.encode(target)?;
-                    }
-                })
-            },
+            Fields::Unit => Ok(quote_spanned! {span=>
+                Self::#variant_ident => {
+                    #token.encode(target)?;
+                }
+            }),
             Fields::Unnamed(t) => {
                 let mut field_paths = Vec::new();
-                let encode_tuple_fields = t.unnamed.iter().enumerate().map(|(i, f)| {
-                    let var_name = Ident::new(&format!("t{}", i), f.span());
-                    let field: ExprPath = parse_quote! { #var_name };
-                    field_paths.push(field.clone());
+                let encode_tuple_fields = t
+                    .unnamed
+                    .iter()
+                    .enumerate()
+                    .map(|(i, f)| {
+                        let var_name = Ident::new(&format!("t{}", i), f.span());
+                        let field: ExprPath = parse_quote! { #var_name };
+                        field_paths.push(field.clone());
 
-                    encode_field(&field.into(), &f.ty)
-                }).collect::<Result<Vec<_>>>()?;
+                        encode_field(&field.into(), &f.ty)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
 
                 Ok(quote_spanned! {span=>
                     Self::#variant_ident( #(#field_paths)* ) => {
@@ -115,16 +121,20 @@ mod expand {
                         #(#encode_tuple_fields)*
                     }
                 })
-            },
+            }
             Fields::Named(s) => {
                 let mut field_paths = Vec::new();
-                let encode_tuple_fields = s.named.iter().map(|f| {
-                    let var_name = &f.ident;
-                    let field: ExprPath = parse_quote! { #var_name };
-                    field_paths.push(field.clone());
+                let encode_tuple_fields = s
+                    .named
+                    .iter()
+                    .map(|f| {
+                        let var_name = &f.ident;
+                        let field: ExprPath = parse_quote! { #var_name };
+                        field_paths.push(field.clone());
 
-                    encode_field(&field.into(), &f.ty)
-                }).collect::<Result<Vec<_>>>()?;
+                        encode_field(&field.into(), &f.ty)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
 
                 Ok(quote_spanned! {span=>
                     Self::#variant_ident{ #(#field_paths),* } => {
@@ -132,7 +142,7 @@ mod expand {
                         #(#encode_tuple_fields)*
                     }
                 })
-            },
+            }
         }
     }
 
@@ -143,30 +153,39 @@ mod expand {
             }
         });
         let encode_fields = match &s.fields {
-            Fields::Unit => { TokenStream::new() },
+            Fields::Unit => TokenStream::new(),
             Fields::Unnamed(u) => {
                 // if has token then prepend whitespace
-                let encode_tuple_fields = u.unnamed.iter().enumerate().map(|(i, f)| {
-                    let field: ExprField = parse_quote! { self.#i };
-                    encode_field(&field.into(), &f.ty)
-                }).collect::<Result<Vec<_>>>()?;
+                let encode_tuple_fields = u
+                    .unnamed
+                    .iter()
+                    .enumerate()
+                    .map(|(i, f)| {
+                        let field: ExprField = parse_quote! { self.#i };
+                        encode_field(&field.into(), &f.ty)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
 
                 quote_spanned! {span=>
                     #(#encode_tuple_fields)*
                 }
-            },
+            }
             Fields::Named(s) => {
                 // if has token then prepend whitespace
-                let encode_struct_fields = s.named.iter().map(|f| {
-                    let ident = &f.ident;
-                    let field: ExprField = parse_quote! { self.#ident };
-                    encode_field(&field.into(), &f.ty)
-                }).collect::<Result<Vec<_>>>()?;
+                let encode_struct_fields = s
+                    .named
+                    .iter()
+                    .map(|f| {
+                        let ident = &f.ident;
+                        let field: ExprField = parse_quote! { self.#ident };
+                        encode_field(&field.into(), &f.ty)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
 
                 quote_spanned! {span=>
                     #(#encode_struct_fields)*
                 }
-            },
+            }
         };
 
         Ok(quote_spanned! {span=>
@@ -186,6 +205,7 @@ mod expand {
                 }
             },
             None => quote_spanned! {ty_span=>
+                #[allow(clippy::needless_borrow)]
                 <#ty as ::command_args::CommandArgs>::encode(&#field_expr, target)?;
             },
         })
@@ -245,9 +265,7 @@ mod expand {
                     let e = parse_data_model_enum(e)?;
                     DataType::Enum(e)
                 }
-                syn::Data::Union(_) => {
-                    return Err(Error::new(span, "does not support union"))
-                }
+                syn::Data::Union(_) => return Err(Error::new(span, "does not support union")),
             },
             name: input.ident,
             generics: input.generics,
@@ -284,7 +302,7 @@ mod expand {
             if is_notoken_variant {
                 let span = variant.span();
                 match variant.fields {
-                    syn::Fields::Unit => {},
+                    syn::Fields::Unit => {}
                     _ => return Err(Error::new(span, "notoken variant must be Unit")),
                 }
                 notoken_variant = Some(NotokenVariant {
@@ -301,7 +319,7 @@ mod expand {
                     span: variant_span,
                     name: variant.ident,
                     token: variant_token,
-                    fields
+                    fields,
                 };
                 variants.push(v);
             }
@@ -309,7 +327,7 @@ mod expand {
 
         Ok(Enum {
             variants,
-            notoken_variant
+            notoken_variant,
         })
     }
 
@@ -338,7 +356,11 @@ mod expand {
 
     /// Turns an enum into a match expr
     fn enum_variants_match(e: &Enum, span: Span) -> Result<TokenStream> {
-        let variant_matches = e.variants.iter().map(|v| variant_match_arm(&v)).collect::<Result<Vec<_>>>()?;
+        let variant_matches = e
+            .variants
+            .iter()
+            .map(variant_match_arm)
+            .collect::<Result<Vec<_>>>()?;
         let catch_all_arm = if let Some(variant) = &e.notoken_variant {
             let notoken_span = variant.span;
             let notoken_ident = &variant.name;
@@ -603,4 +625,3 @@ mod expand {
         }
     }
 }
-
