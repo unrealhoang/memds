@@ -1,10 +1,16 @@
 use std::fmt::Display;
 
 pub trait CommandArgs<'a>: Sized {
+    fn encode(&self, target: &mut Vec<String>) -> Result<(), Error>;
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error>;
 }
 
 impl<'a> CommandArgs<'a> for &'a str {
+    fn encode(&self, target: &mut Vec<String>) -> Result<(), Error> {
+        target.push(self.to_string());
+        Ok(())
+    }
+
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if let Some(s) = args.get(0) {
             *args = &args[1..];
@@ -16,6 +22,14 @@ impl<'a> CommandArgs<'a> for &'a str {
 }
 
 impl<'a, T: CommandArgs<'a>> CommandArgs<'a> for Vec<T> {
+    fn encode(&self, target: &mut Vec<String>) -> Result<(), Error> {
+        for ele in self.iter() {
+            ele.encode(target)?;
+        }
+
+        Ok(())
+    }
+
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if args.is_empty() {
             return Ok(None);
@@ -31,6 +45,11 @@ impl<'a, T: CommandArgs<'a>> CommandArgs<'a> for Vec<T> {
 }
 
 impl<'a> CommandArgs<'a> for usize {
+    fn encode(&self, target: &mut Vec<String>) -> Result<(), Error> {
+        target.push(format!("{}", self));
+        Ok(())
+    }
+
     fn parse_maybe(args: &mut &[&'a str]) -> Result<Option<Self>, Error> {
         if let Some(s) = args.get(0) {
             *args = &args[1..];

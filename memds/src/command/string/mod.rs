@@ -1,4 +1,3 @@
-
 use command_args_derive::CommandArgsBlock;
 use deseresp::types::OkResponse;
 
@@ -20,7 +19,7 @@ impl<'a> CommandHandler for GetCommand<'a> {
     }
 }
 
-#[derive(CommandArgsBlock, Debug)]
+#[derive(CommandArgsBlock, Debug, PartialEq)]
 #[argtoken("SET")]
 pub struct SetCommand<'a> {
     key: &'a str,
@@ -30,7 +29,7 @@ pub struct SetCommand<'a> {
     expire: Option<ExpireOption>,
 }
 
-#[derive(CommandArgsBlock, Debug)]
+#[derive(CommandArgsBlock, Debug, PartialEq)]
 enum Exists {
     #[argtoken("NX")]
     NotExistedOnly,
@@ -40,11 +39,11 @@ enum Exists {
     Any,
 }
 
-#[derive(CommandArgsBlock, Debug)]
+#[derive(CommandArgsBlock, Debug, PartialEq)]
 #[argtoken("GET")]
 struct SetGet;
 
-#[derive(CommandArgsBlock, Debug)]
+#[derive(CommandArgsBlock, Debug, PartialEq)]
 enum ExpireOption {
     #[argtoken("EX")]
     ExpireAfterSecond(usize),
@@ -91,5 +90,30 @@ mod tests {
         assert_matches!(s.exists, Exists::Any);
         assert_matches!(s.get, None);
         assert_matches!(s.expire, Some(ExpireOption::ExpireAtMs(20)));
+    }
+
+    #[test]
+    fn test_encode_set() {
+        let s = SetCommand {
+            key: "abc",
+            value: "def",
+            exists: Exists::Any,
+            get: None,
+            expire: Some(ExpireOption::ExpireAfterSecond(20)),
+        };
+        let mut target: Vec<String> = Vec::new();
+        s.encode(&mut target).unwrap();
+
+        let expected = ["SET", "abc", "def", "EX", "20"]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>();
+        assert_eq!(expected, target);
+        let target_ref = target.iter().map(String::as_str).collect::<Vec<_>>();
+
+        let source = SetCommand::parse_maybe(&mut &target_ref[..])
+            .unwrap()
+            .unwrap();
+        assert_eq!(source, s);
     }
 }

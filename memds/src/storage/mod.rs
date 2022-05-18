@@ -12,8 +12,7 @@ pub fn save(db: &HashMap<String, MemDS>) -> Result<(), Error> {
         .map_err(|e| Error::Handle(format!("Failed to open db file {}", e)))?;
     let writer = BufWriter::new(file);
 
-    bincode::serialize_into(writer, db)
-        .map_err(|e| Error::Handle(format!("Failed to save {}", e)))
+    bincode::serialize_into(writer, db).map_err(|e| Error::Handle(format!("Failed to save {}", e)))
 }
 
 pub fn load() -> Result<HashMap<String, MemDS>, Error> {
@@ -21,6 +20,5 @@ pub fn load() -> Result<HashMap<String, MemDS>, Error> {
         File::open("db.bin").map_err(|e| Error::Handle(format!("Failed to open db file {}", e)))?;
     let reader = BufReader::new(file);
 
-    bincode::deserialize_from(reader)
-        .map_err(|e| Error::Handle(format!("Failed to load {}", e)))
+    bincode::deserialize_from(reader).map_err(|e| Error::Handle(format!("Failed to load {}", e)))
 }
