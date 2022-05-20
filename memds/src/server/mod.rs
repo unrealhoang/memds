@@ -1,10 +1,10 @@
-use std::{
-    net::SocketAddr,
-    sync::Arc,
-};
+use std::{net::SocketAddr, sync::Arc};
 
-use futures::{stream::FuturesUnordered, StreamExt, future};
-use tokio::{net::{TcpListener, TcpStream}, sync::broadcast};
+use futures::{future, stream::FuturesUnordered, StreamExt};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::broadcast,
+};
 
 use crate::{
     connection::{flush, FrameReader},
@@ -137,7 +137,8 @@ impl Session {
                 }
             }
 
-            let read_write = future::join(connection.read_to_buf(), flush(&mut writer, &mut write_buf));
+            let read_write =
+                future::join(connection.read_to_buf(), flush(&mut writer, &mut write_buf));
             tokio::pin!(read_write);
 
             tokio::select! {
