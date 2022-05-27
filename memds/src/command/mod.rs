@@ -3,10 +3,10 @@ use serde::Serialize;
 
 use crate::{database::Database, Error};
 
-mod admin;
-mod connection;
-mod set;
-mod string;
+pub mod admin;
+pub mod connection;
+pub mod set;
+pub mod string;
 
 pub trait CommandHandler {
     type Output: Serialize;
@@ -74,6 +74,7 @@ fn parse_and_handle_main(
         self::connection::PingCommand,
         self::string::GetCommand,
         self::string::SetCommand,
+        self::string::IncrCommand,
         self::set::SaddCommand,
         self::set::SmembersCommand,
         self::admin::SaveCommand
@@ -131,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_handle_and_parse_hello_command() {
-        let db = Database::new();
+        let db = Database::new(String::new());
         let args = ["HELLO", "3", "AUTH", "user", "pass"];
         let mut write_buf = Vec::new();
         parse_and_handle(&args, &db, &mut write_buf).unwrap();

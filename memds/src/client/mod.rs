@@ -1,7 +1,7 @@
 use anyhow::Context;
 use command_args::CommandArgs;
 use serde::{de::DeserializeOwned, Serialize};
-use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
+use tokio::net::{tcp::OwnedWriteHalf, TcpStream, ToSocketAddrs};
 
 use crate::{
     command::CommandHandler,
@@ -16,6 +16,12 @@ pub struct Client {
 }
 
 impl Client {
+    pub async fn from_addr<A: ToSocketAddrs>(addr: A) -> anyhow::Result<Self> {
+        let conn = TcpStream::connect(addr).await?;
+
+        Ok(Self::new(conn))
+    }
+
     pub fn new(socket: TcpStream) -> Self {
         let (reader, writer) = socket.into_split();
         let frame_reader = FrameReader::new(reader);

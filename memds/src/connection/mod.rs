@@ -6,7 +6,7 @@ use tokio::{
 };
 
 fn parse<'a, D: Deserialize<'a>>(read_buf: &'a mut BytesMut) -> anyhow::Result<Option<(D, usize)>> {
-    let mut deserializer = deseresp::from_slice(read_buf);
+    let mut deserializer = deseresp::Deserializer::from_slice(read_buf);
     match Deserialize::deserialize(&mut deserializer) {
         Ok(deserialized) => {
             let data = deserialized;

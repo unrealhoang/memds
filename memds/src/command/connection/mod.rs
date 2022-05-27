@@ -32,7 +32,7 @@ pub struct ServerProperties {
 }
 
 #[derive(Debug, CommandArgsBlock)]
-#[argtoken("COMMAND")]
+#[argtoken("PING")]
 pub struct PingCommand;
 
 impl<'a> CommandHandler for HelloCommand<'a> {

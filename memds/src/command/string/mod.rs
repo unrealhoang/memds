@@ -6,9 +6,23 @@ use crate::database::Database;
 use super::{CommandHandler, Error};
 
 #[derive(Debug, CommandArgsBlock)]
+#[argtoken("INCR")]
+pub struct IncrCommand<'a> {
+    pub key: &'a str,
+}
+
+impl<'a> CommandHandler for IncrCommand<'a> {
+    type Output = i64;
+
+    fn handle(self, db: &Database) -> Result<Self::Output, Error> {
+        db.incr(self.key)
+    }
+}
+
+#[derive(Debug, CommandArgsBlock)]
 #[argtoken("GET")]
 pub struct GetCommand<'a> {
-    key: &'a str,
+    pub key: &'a str,
 }
 
 impl<'a> CommandHandler for GetCommand<'a> {
