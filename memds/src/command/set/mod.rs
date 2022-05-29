@@ -7,8 +7,8 @@ use super::{CommandHandler, Error};
 #[derive(Debug, CommandArgsBlock)]
 #[argtoken("SADD")]
 pub struct SaddCommand<'a> {
-    key: &'a str,
-    elements: Vec<&'a str>,
+    pub key: &'a str,
+    pub elements: Vec<&'a str>,
 }
 
 impl<'a> CommandHandler for SaddCommand<'a> {
@@ -22,7 +22,7 @@ impl<'a> CommandHandler for SaddCommand<'a> {
 #[derive(Debug, CommandArgsBlock)]
 #[argtoken("SMEMBERS")]
 pub struct SmembersCommand<'a> {
-    key: &'a str,
+    pub key: &'a str,
 }
 
 impl<'a> CommandHandler for SmembersCommand<'a> {

@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fmt::Write;
 
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +29,13 @@ impl MemDS {
         }
     }
 
+    pub fn string_mut(&mut self, key: &str) -> Result<&mut StringDS, Error> {
+        match self {
+            MemDS::String(s) => Ok(s),
+            _ => Err(Error::Handle(format!("ERR key {} is not string", key))),
+        }
+    }
+
     pub fn set(&self, key: &str) -> Result<&SetDS, Error> {
         match self {
             MemDS::Set(s) => Ok(s),
@@ -50,6 +58,21 @@ impl StringDS {
 
     pub fn fetch(&self) -> String {
         self.s.to_owned()
+    }
+
+    pub fn incr(&mut self) -> Result<i64, Error> {
+        match self.s.parse::<i64>() {
+            Ok(mut num) => {
+                num = num + 1;
+                self.s.clear();
+                write!(self.s, "{}", num).unwrap();
+
+                Ok(num)
+            }
+            Err(_) => Err(Error::Handle(format!(
+                "value is not an integer or out of range"
+            ))),
+        }
     }
 }
 

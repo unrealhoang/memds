@@ -65,14 +65,14 @@ async fn accept_loop(
 }
 
 impl Server {
-    pub fn new() -> Self {
+    pub fn new(port: u16, db_path: String) -> Self {
         Server {
-            port: 6901,
-            db: Arc::new(Database::new()),
+            port,
+            db: Arc::new(Database::new(db_path)),
         }
     }
 
-    pub async fn service(self) -> anyhow::Result<Terminator> {
+    pub async fn service(self) -> anyhow::Result<(SocketAddr, Terminator)> {
         let listener = TcpListener::bind(("127.0.0.1", self.port)).await?;
 
         let addr = listener.local_addr().unwrap();
@@ -97,7 +97,7 @@ impl Server {
             }
         });
 
-        Ok(terminator)
+        Ok((addr, terminator))
     }
 }
 

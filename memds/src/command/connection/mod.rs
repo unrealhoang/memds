@@ -26,13 +26,13 @@ pub struct CommandCommand;
 
 #[derive(Debug, Serialize)]
 pub struct ServerProperties {
-    server: String,
-    version: String,
-    proto: usize,
+    pub server: String,
+    pub version: String,
+    pub proto: usize,
 }
 
 #[derive(Debug, CommandArgsBlock)]
-#[argtoken("COMMAND")]
+#[argtoken("PING")]
 pub struct PingCommand;
 
 impl<'a> CommandHandler for HelloCommand<'a> {

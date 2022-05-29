@@ -5,10 +5,10 @@ use tokio::signal;
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
-    let server = Server::new();
+    let server = Server::new(6901, "db.bin".into());
 
     tracing::info!("Listening...");
-    let server_service = server.service().await?;
+    let (_addr, server_service) = server.service().await?;
 
     wait_for_signal().await;
     tracing::info!("SIGINT received, shutting down...");

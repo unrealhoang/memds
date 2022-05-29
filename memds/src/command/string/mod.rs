@@ -6,9 +6,23 @@ use crate::database::Database;
 use super::{CommandHandler, Error};
 
 #[derive(Debug, CommandArgsBlock)]
+#[argtoken("INCR")]
+pub struct IncrCommand<'a> {
+    pub key: &'a str,
+}
+
+impl<'a> CommandHandler for IncrCommand<'a> {
+    type Output = i64;
+
+    fn handle(self, db: &Database) -> Result<Self::Output, Error> {
+        db.incr(self.key)
+    }
+}
+
+#[derive(Debug, CommandArgsBlock)]
 #[argtoken("GET")]
 pub struct GetCommand<'a> {
-    key: &'a str,
+    pub key: &'a str,
 }
 
 impl<'a> CommandHandler for GetCommand<'a> {
@@ -22,15 +36,15 @@ impl<'a> CommandHandler for GetCommand<'a> {
 #[derive(CommandArgsBlock, Debug, PartialEq)]
 #[argtoken("SET")]
 pub struct SetCommand<'a> {
-    key: &'a str,
-    value: &'a str,
-    exists: Exists,
-    get: Option<SetGet>,
-    expire: Option<ExpireOption>,
+    pub key: &'a str,
+    pub value: &'a str,
+    pub exists: Exists,
+    pub get: Option<SetGet>,
+    pub expire: Option<ExpireOption>,
 }
 
 #[derive(CommandArgsBlock, Debug, PartialEq)]
-enum Exists {
+pub enum Exists {
     #[argtoken("NX")]
     NotExistedOnly,
     #[argtoken("XX")]
@@ -41,10 +55,10 @@ enum Exists {
 
 #[derive(CommandArgsBlock, Debug, PartialEq)]
 #[argtoken("GET")]
-struct SetGet;
+pub struct SetGet;
 
 #[derive(CommandArgsBlock, Debug, PartialEq)]
-enum ExpireOption {
+pub enum ExpireOption {
     #[argtoken("EX")]
     ExpireAfterSecond(usize),
     #[argtoken("PX")]

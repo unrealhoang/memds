@@ -6,22 +6,33 @@ use crate::{
 };
 
 pub struct Database {
+    db_path: String,
     data: Mutex<HashMap<String, MemDS>>,
 }
 
 impl Database {
-    pub fn new() -> Self {
-        match storage::load() {
+    pub fn new(db_path: String) -> Self {
+        match storage::load(&db_path) {
             Ok(d) => Database {
+                db_path,
                 data: Mutex::new(d),
             },
             Err(e) => {
                 tracing::error!("Failed to load data: {}", e);
                 Database {
+                    db_path,
                     data: Mutex::new(Default::default()),
                 }
             }
         }
+    }
+
+    pub fn incr(&self, key: &str) -> Result<i64, Error> {
+        let mut lock = self.data.lock().unwrap();
+        let string = lock
+            .entry(key.to_string())
+            .or_insert(MemDS::String(StringDS::from("0")));
+        string.string_mut(key)?.incr()
     }
 
     pub fn get(&self, key: &str) -> Result<Option<String>, Error> {
@@ -64,6 +75,6 @@ impl Database {
     pub fn save(&self) -> Result<(), Error> {
         let lock = self.data.lock().unwrap();
 
-        storage::save(&lock)
+        storage::save(&self.db_path, &lock)
     }
 }
